@@ -16,7 +16,7 @@ async function main(): Promise<void> {
   const config = loadConfig();
   const db = RelayDb.open(config.dataDir);
 
-  const provider = createEnsProvider(config.infuraKey);
+  const provider = createEnsProvider(config.ethRpcUrl);
 
   const deanAddress = await resolveXmtpAddress(config.xmtpDeanAddressOrEns, provider);
   const allowlistResolved = await Promise.all(

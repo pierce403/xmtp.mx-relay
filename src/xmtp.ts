@@ -5,6 +5,8 @@ import type { Persistence } from '@xmtp/xmtp-js';
 
 export type { Persistence };
 
+const DEFAULT_MAINNET_RPC_URL = 'https://cloudflare-eth.com';
+
 export function normalizeXmtpEnv(value: string | undefined): XmtpEnv {
   if (value === 'dev' || value === 'local' || value === 'production') return value;
   return 'production';
@@ -14,22 +16,19 @@ export function isHexAddress(value: string): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(value.trim());
 }
 
-export function createEnsProvider(infuraKey: string | null): ethers.providers.Provider | undefined {
-  if (!infuraKey) return undefined;
-  return new ethers.providers.JsonRpcProvider(`https://mainnet.infura.io/v3/${infuraKey}`);
+export function createEnsProvider(ethRpcUrl: string | null): ethers.providers.Provider {
+  const rpcUrl = ethRpcUrl?.trim() || DEFAULT_MAINNET_RPC_URL;
+  return new ethers.providers.JsonRpcProvider(rpcUrl, { name: 'homestead', chainId: 1 });
 }
 
 export async function resolveXmtpAddress(
   addressOrEns: string,
-  provider: ethers.providers.Provider | undefined,
+  provider: ethers.providers.Provider,
 ): Promise<string> {
   const trimmed = addressOrEns.trim();
   if (ethers.utils.isAddress(trimmed)) return ethers.utils.getAddress(trimmed);
   if (!trimmed.endsWith('.eth')) {
     throw new Error(`Invalid XMTP address (expected 0x… address or .eth): ${addressOrEns}`);
-  }
-  if (!provider) {
-    throw new Error('INFURA_KEY is required to resolve ENS names');
   }
   const resolved = await provider.resolveName(trimmed);
   if (!resolved) {
@@ -50,4 +49,3 @@ export async function createXmtpClient(args: {
     basePersistence: args.basePersistence,
   });
 }
-

@@ -25,10 +25,8 @@ const XMTP_ENV: XmtpEnv = (() => {
   return 'production';
 })();
 
-const INFURA_KEY = process.env.INFURA_KEY;
-const provider = INFURA_KEY
-  ? new ethers.providers.JsonRpcProvider(`https://mainnet.infura.io/v3/${INFURA_KEY}`)
-  : undefined;
+const ETH_RPC_URL = process.env.ETH_RPC_URL?.trim() || 'https://cloudflare-eth.com';
+const provider = new ethers.providers.JsonRpcProvider(ETH_RPC_URL, { name: 'homestead', chainId: 1 });
 
 async function resolveXmtpAddress(addressOrEns: string): Promise<string> {
   const trimmed = addressOrEns.trim();
@@ -37,9 +35,6 @@ async function resolveXmtpAddress(addressOrEns: string): Promise<string> {
   }
   if (!trimmed.endsWith('.eth')) {
     throw new Error(`Invalid XMTP_SERVER_ADDRESS (expected 0x… address or .eth): ${addressOrEns}`);
-  }
-  if (!provider) {
-    throw new Error('INFURA_KEY is required to resolve ENS names');
   }
   const resolved = await provider.resolveName(trimmed);
   if (!resolved) {

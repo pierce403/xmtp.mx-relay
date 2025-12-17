@@ -45,7 +45,7 @@ See `.env.example`.
 - `XMTP_BOT_KEY`: bot wallet private key (hex, with or without `0x`)
 - `XMTP_DEAN_ADDRESS`: Dean recipient (`0x…` or `.eth`)
 - `XMTP_ALLOWED_SENDERS`: CSV allowlist (`0x…` and/or `.eth`)
-- `INFURA_KEY`: required if using any `.eth` value
+- `ETH_RPC_URL`: optional mainnet RPC for ENS resolution (defaults to `https://cloudflare-eth.com`)
 
 ## Deployment Notes (Railway)
 
@@ -57,7 +57,7 @@ See `.env.example`.
 ## Common Pitfalls / Gotchas
 
 - `better-sqlite3` is a native module: Docker build installs `python3 make g++` (already in `Dockerfile`).
-- ENS resolution requires `INFURA_KEY` (used for `XMTP_DEAN_ADDRESS`, `XMTP_ALLOWED_SENDERS`, `ADMIN_XMTP_ADDRESS`).
+- ENS resolution uses `ETH_RPC_URL` (defaults to Cloudflare mainnet RPC).
 - Mailgun inbound payload can be `multipart/form-data` or urlencoded; attachments are currently ignored (v1).
 - Keep idempotency intact: inbound dedupe uses Mailgun `message-id`/`Message-Id`; outbound dedupe uses XMTP `message.id`.
 

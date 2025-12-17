@@ -23,7 +23,7 @@ export type Config = {
   xmtpDeanAddressOrEns: string;
   xmtpAllowedSenders: string[];
   adminXmtpAddressOrEns: string | null;
-  infuraKey: string | null;
+  ethRpcUrl: string;
   mailgunApiKey: string;
   mailgunDomain: string;
   mailgunWebhookSigningKey: string;
@@ -44,7 +44,7 @@ export function loadConfig(): Config {
     XMTP_DEAN_ADDRESS: z.string().min(1),
     XMTP_ALLOWED_SENDERS: z.string().optional(),
     ADMIN_XMTP_ADDRESS: z.string().optional(),
-    INFURA_KEY: z.string().optional(),
+    ETH_RPC_URL: z.string().optional(),
 
     MAILGUN_API_KEY: z.string().min(1),
     MAILGUN_DOMAIN: z.string().min(1),
@@ -68,14 +68,7 @@ export function loadConfig(): Config {
     ? splitCsv(parsed.XMTP_ALLOWED_SENDERS)
     : [parsed.XMTP_DEAN_ADDRESS.trim()];
 
-  const needsEns =
-    [parsed.XMTP_DEAN_ADDRESS, parsed.ADMIN_XMTP_ADDRESS || '', ...xmtpAllowedSendersRaw].some(
-      (value) => value.trim().endsWith('.eth'),
-    ) && !parsed.INFURA_KEY?.trim();
-
-  if (needsEns) {
-    throw new Error('INFURA_KEY is required when using .eth values (XMTP_DEAN_ADDRESS / XMTP_ALLOWED_SENDERS / ADMIN_XMTP_ADDRESS)');
-  }
+  const ethRpcUrl = parsed.ETH_RPC_URL?.trim() || 'https://cloudflare-eth.com';
 
   const mailgunFrom = parsed.MAILGUN_FROM?.trim() || `XMTP-MX Relay <noreply@${parsed.MAILGUN_DOMAIN}>`;
 
@@ -88,7 +81,7 @@ export function loadConfig(): Config {
     xmtpDeanAddressOrEns: parsed.XMTP_DEAN_ADDRESS.trim(),
     xmtpAllowedSenders: xmtpAllowedSendersRaw,
     adminXmtpAddressOrEns: parsed.ADMIN_XMTP_ADDRESS?.trim() || null,
-    infuraKey: parsed.INFURA_KEY?.trim() || null,
+    ethRpcUrl,
     mailgunApiKey: parsed.MAILGUN_API_KEY.trim(),
     mailgunDomain: parsed.MAILGUN_DOMAIN.trim(),
     mailgunWebhookSigningKey: parsed.MAILGUN_WEBHOOK_SIGNING_KEY.trim(),
@@ -97,4 +90,3 @@ export function loadConfig(): Config {
     maxInboundFieldSizeBytes: parsed.MAX_INBOUND_FIELD_SIZE_BYTES,
   };
 }
-
