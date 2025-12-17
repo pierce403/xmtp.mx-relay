@@ -1,0 +1,100 @@
+import path from 'node:path';
+import { z } from 'zod';
+
+const xmtpEnvSchema = z.enum(['production', 'dev', 'local']);
+
+function splitCsv(value: string): string[] {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function isHexAddress(value: string): boolean {
+  return /^0x[a-fA-F0-9]{40}$/.test(value.trim());
+}
+
+export type Config = {
+  port: number;
+  dataDir: string;
+  inboundEmailTo: string;
+  xmtpEnv: z.infer<typeof xmtpEnvSchema>;
+  xmtpBotKey: string;
+  xmtpDeanAddressOrEns: string;
+  xmtpAllowedSenders: string[];
+  adminXmtpAddressOrEns: string | null;
+  infuraKey: string | null;
+  mailgunApiKey: string;
+  mailgunDomain: string;
+  mailgunWebhookSigningKey: string;
+  mailgunFrom: string;
+  webhookRateLimit: { windowMs: number; max: number };
+  maxInboundFieldSizeBytes: number;
+};
+
+export function loadConfig(): Config {
+  const schema = z.object({
+    PORT: z.coerce.number().int().positive().default(3000),
+    DATA_DIR: z.string().optional(),
+    INBOUND_EMAIL_TO: z.string().default('deanpierce.eth@xmtp.mx'),
+
+    XMTP_ENV: xmtpEnvSchema.default('production'),
+    XMTP_BOT_KEY: z.string().optional(),
+    XMTP_PRIVATE_KEY: z.string().optional(),
+    XMTP_DEAN_ADDRESS: z.string().min(1),
+    XMTP_ALLOWED_SENDERS: z.string().optional(),
+    ADMIN_XMTP_ADDRESS: z.string().optional(),
+    INFURA_KEY: z.string().optional(),
+
+    MAILGUN_API_KEY: z.string().min(1),
+    MAILGUN_DOMAIN: z.string().min(1),
+    MAILGUN_WEBHOOK_SIGNING_KEY: z.string().min(1),
+    MAILGUN_FROM: z.string().optional(),
+
+    WEBHOOK_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+    WEBHOOK_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
+    MAX_INBOUND_FIELD_SIZE_BYTES: z.coerce.number().int().positive().default(5 * 1024 * 1024),
+  });
+
+  const parsed = schema.parse(process.env);
+  const dataDir = parsed.DATA_DIR?.trim() || path.join(process.cwd(), 'data');
+
+  const xmtpBotKey = (parsed.XMTP_BOT_KEY || parsed.XMTP_PRIVATE_KEY || '').trim();
+  if (!xmtpBotKey) {
+    throw new Error('Missing env var: XMTP_BOT_KEY (or XMTP_PRIVATE_KEY)');
+  }
+
+  const xmtpAllowedSendersRaw = parsed.XMTP_ALLOWED_SENDERS?.trim()
+    ? splitCsv(parsed.XMTP_ALLOWED_SENDERS)
+    : [parsed.XMTP_DEAN_ADDRESS.trim()];
+
+  const needsEns =
+    [parsed.XMTP_DEAN_ADDRESS, parsed.ADMIN_XMTP_ADDRESS || '', ...xmtpAllowedSendersRaw].some(
+      (value) => value.trim().endsWith('.eth'),
+    ) && !parsed.INFURA_KEY?.trim();
+
+  if (needsEns) {
+    throw new Error('INFURA_KEY is required when using .eth values (XMTP_DEAN_ADDRESS / XMTP_ALLOWED_SENDERS / ADMIN_XMTP_ADDRESS)');
+  }
+
+  const mailgunFrom = parsed.MAILGUN_FROM?.trim() || `XMTP-MX Relay <noreply@${parsed.MAILGUN_DOMAIN}>`;
+
+  return {
+    port: parsed.PORT,
+    dataDir,
+    inboundEmailTo: parsed.INBOUND_EMAIL_TO.trim(),
+    xmtpEnv: parsed.XMTP_ENV,
+    xmtpBotKey,
+    xmtpDeanAddressOrEns: parsed.XMTP_DEAN_ADDRESS.trim(),
+    xmtpAllowedSenders: xmtpAllowedSendersRaw,
+    adminXmtpAddressOrEns: parsed.ADMIN_XMTP_ADDRESS?.trim() || null,
+    infuraKey: parsed.INFURA_KEY?.trim() || null,
+    mailgunApiKey: parsed.MAILGUN_API_KEY.trim(),
+    mailgunDomain: parsed.MAILGUN_DOMAIN.trim(),
+    mailgunWebhookSigningKey: parsed.MAILGUN_WEBHOOK_SIGNING_KEY.trim(),
+    mailgunFrom,
+    webhookRateLimit: { windowMs: parsed.WEBHOOK_RATE_LIMIT_WINDOW_MS, max: parsed.WEBHOOK_RATE_LIMIT_MAX },
+    maxInboundFieldSizeBytes: parsed.MAX_INBOUND_FIELD_SIZE_BYTES,
+  };
+}
+

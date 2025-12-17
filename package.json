@@ -1,27 +1,46 @@
 {
   "name": "xmtp.mx-server",
   "version": "1.0.0",
-  "description": "XMTP / Email relay using Mailgun",
-  "main": "smtp-xmtp-server.ts",
+  "description": "Bidirectional XMTP / Email relay using Mailgun",
+  "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "ts-node smtp-xmtp-server.ts",
-    "dev": "ts-node-dev --respawn --transpile-only smtp-xmtp-server.ts"
+    "start": "node dist/index.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "fake:mailgun": "node scripts/fake-mailgun-inbound.js",
+    "cf:dev": "wrangler dev --test-scheduled --config cf-worker/wrangler.toml",
+    "cf:deploy": "wrangler deploy --config cf-worker/wrangler.toml",
+    "test:integration": "ts-node test_integration.ts",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
-    "@types/node": "^22.7.5",
     "@xmtp/xmtp-js": "^13.0.1",
+    "better-sqlite3": "^12.4.1",
+    "busboy": "^1.6.0",
     "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.2.1",
     "ethers": "^5.7.2",
     "form-data": "^4.0.0",
     "mailgun.js": "^10.2.3",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.6.3"
+    "pino": "^9.9.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "ts-node-dev": "^2.0.0"
+    "@cloudflare/workers-types": "^4.20251217.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/busboy": "^1.5.4",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.7.5",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.6.3",
+    "wrangler": "^4.55.0"
   }
 }

@@ -1,0 +1,22 @@
+name = "xmtp-mx-relay"
+main = "src/worker.ts"
+compatibility_date = "2025-12-17"
+
+[triggers]
+# Poll XMTP once per minute (Workers can’t keep an always-on stream running).
+crons = ["*/1 * * * *"]
+
+[vars]
+# Non-secret vars can live here.
+MAILGUN_DOMAIN = ""
+# production | dev | local
+XMTP_ENV = "production"
+# Optional: 0x… address (ENS not supported in the Worker version)
+ADMIN_XMTP_ADDRESS = ""
+
+[[kv_namespaces]]
+binding = "STATE"
+# Fill these in after creating the namespace:
+#   wrangler kv namespace create STATE --config cf-worker/wrangler.toml
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_KV_PREVIEW_ID"
