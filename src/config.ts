@@ -68,7 +68,7 @@ export function loadConfig(): Config {
     ? splitCsv(parsed.XMTP_ALLOWED_SENDERS)
     : [parsed.XMTP_DEAN_ADDRESS.trim()];
 
-  const ethRpcUrl = parsed.ETH_RPC_URL?.trim() || 'https://cloudflare-eth.com';
+  const ethRpcUrl = parsed.ETH_RPC_URL?.trim() || 'https://ethereum.publicnode.com';
 
   const mailgunFrom = parsed.MAILGUN_FROM?.trim() || `XMTP-MX Relay <noreply@${parsed.MAILGUN_DOMAIN}>`;
 

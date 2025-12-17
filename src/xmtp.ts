@@ -5,7 +5,7 @@ import type { Persistence } from '@xmtp/xmtp-js';
 
 export type { Persistence };
 
-const DEFAULT_MAINNET_RPC_URL = 'https://cloudflare-eth.com';
+const DEFAULT_MAINNET_RPC_URL = 'https://ethereum.publicnode.com';
 
 export function normalizeXmtpEnv(value: string | undefined): XmtpEnv {
   if (value === 'dev' || value === 'local' || value === 'production') return value;

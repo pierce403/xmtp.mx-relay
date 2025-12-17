@@ -25,7 +25,7 @@ const XMTP_ENV: XmtpEnv = (() => {
   return 'production';
 })();
 
-const ETH_RPC_URL = process.env.ETH_RPC_URL?.trim() || 'https://cloudflare-eth.com';
+const ETH_RPC_URL = process.env.ETH_RPC_URL?.trim() || 'https://ethereum.publicnode.com';
 const provider = new ethers.providers.JsonRpcProvider(ETH_RPC_URL, { name: 'homestead', chainId: 1 });
 
 async function resolveXmtpAddress(addressOrEns: string): Promise<string> {
