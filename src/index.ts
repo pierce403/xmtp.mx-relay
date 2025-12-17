@@ -166,6 +166,12 @@ async function handleXmtpMessage(args: {
   if (sender === botAddress.toLowerCase()) return;
   if (typeof message.content !== 'string') return;
 
+  if (isGreetingMessage(message.content)) {
+    const allowlisted = db.isAllowlisted(sender);
+    await message.conversation.send(buildIntroMessage({ allowlisted }));
+    return;
+  }
+
   let parsedJson: unknown;
   try {
     parsedJson = JSON.parse(message.content);
@@ -260,6 +266,62 @@ async function handleXmtpMessage(args: {
     await message.conversation.send(JSON.stringify(makeEmailSendResultV1({ ok: false, error: errMsg })));
     log.error({ sender, error }, 'mailgun.send_failed');
   }
+}
+
+function isGreetingMessage(content: string): boolean {
+  const trimmed = content.trim();
+  if (!trimmed) return false;
+  // Avoid matching JSON payloads that happen to contain "hello".
+  if (trimmed.startsWith('{')) return false;
+
+  const lower = trimmed.toLowerCase();
+  if (lower === 'hello' || lower === 'hi' || lower === 'hey' || lower === 'help') return true;
+  if (lower.startsWith('hello ')) return true;
+  if (lower.startsWith('hi ')) return true;
+  if (lower.startsWith('hey ')) return true;
+  return false;
+}
+
+function buildIntroMessage(args: { allowlisted: boolean }): string {
+  const allowlistLine = args.allowlisted
+    ? 'Your address is allowlisted for outbound email.'
+    : 'Your address is NOT allowlisted for outbound email (ask the admin to add you).';
+
+  const example = {
+    type: 'email.send.v1',
+    to: ['someone@example.com'],
+    cc: [],
+    bcc: [],
+    subject: 'Hello from XMTP',
+    text: 'This is a test email sent via the xmtp.mx relay bot.',
+    html: null,
+    replyTo: 'deanpierce.eth@xmtp.mx',
+  };
+
+  const replyExample = {
+    type: 'email.send.result.v1',
+    ok: true,
+    mailgunId: '...',
+    error: null,
+  };
+
+  return [
+    'Hello — I am the xmtp.mx relay bot.',
+    '',
+    allowlistLine,
+    '',
+    'To send an email, send me a JSON message like:',
+    JSON.stringify(example, null, 2),
+    '',
+    'Notes:',
+    '- `type` must be `email.send.v1`',
+    '- `to` is required (array of email strings)',
+    '- `cc`, `bcc`, `subject`, `replyTo` are optional',
+    '- Provide at least one of `text` or `html`',
+    '',
+    'I will reply with:',
+    JSON.stringify(replyExample, null, 2),
+  ].join('\n');
 }
 
 main().catch((error) => {
