@@ -32,7 +32,7 @@
 - **Description**: SQLite stores relay state and provides idempotency for both inbound and outbound flows.
 - **Properties**:
   - Relay state is stored at `DATA_DIR/relay.sqlite`
-  - XMTP keystore persistence is stored in SQLite (`xmtp_kv`)
+  - XMTP Node SDK stores its local DB under `DATA_DIR/` (`xmtp-<env>-<inbox-id>.db3`)
   - Inbound dedupe and outbound dedupe prevent duplicates across restarts
 - **Test Criteria**:
   - [x] `npm run typecheck` passes
@@ -88,4 +88,3 @@
   - Per-user allowlists and quotas
 - **Test Criteria**:
   - [ ] New user can complete verification and receive inbound email over XMTP
-

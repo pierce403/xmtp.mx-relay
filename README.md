@@ -8,7 +8,8 @@ Bidirectional relay between SMTP (Mailgun) and XMTP.
 - **Outbound (XMTP → SMTP):** Allowlisted XMTP senders send `email.send.v1` JSON to the bot; the relay sends a real email via Mailgun and replies with `email.send.result.v1`.
 
 Persistence:
-- Relay state + XMTP keystore persistence are stored in `DATA_DIR/relay.sqlite` (mount `DATA_DIR=/data` on Railway).
+- Relay state is stored in `DATA_DIR/relay.sqlite` (mount `DATA_DIR=/data` on Railway).
+- XMTP Node SDK stores its local DB under `DATA_DIR/` (`xmtp-<env>-<inbox-id>.db3`).
 
 ## Message formats
 
@@ -64,7 +65,7 @@ Endpoints:
 ## Security defaults
 
 - Mailgun webhook signature verification is required (`MAILGUN_WEBHOOK_SIGNING_KEY`).
-- Outbound sends are restricted to `XMTP_ALLOWED_SENDERS` (resolved to 0x addresses).
+- Outbound sends are restricted to `XMTP_ALLOWED_SENDERS` (resolved to XMTP inbox IDs).
 - Webhook is rate-limited and size-limited via env vars.
 - Outbound email `From:` is forced to `MAILGUN_FROM` (never taken from user input).
 

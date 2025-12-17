@@ -1,6 +1,6 @@
-import { Client } from '@xmtp/xmtp-js';
 import * as dotenv from 'dotenv';
 import { ethers } from 'ethers';
+import { Client, ConsentState, IdentifierKind, getInboxIdForIdentifier, type Signer } from '@xmtp/node-sdk';
 
 // Load environment variables
 dotenv.config();
@@ -31,7 +31,7 @@ const provider = new ethers.providers.JsonRpcProvider(ETH_RPC_URL, { name: 'home
 async function resolveXmtpAddress(addressOrEns: string): Promise<string> {
   const trimmed = addressOrEns.trim();
   if (ethers.utils.isAddress(trimmed)) {
-    return trimmed;
+    return ethers.utils.getAddress(trimmed);
   }
   if (!trimmed.endsWith('.eth')) {
     throw new Error(`Invalid XMTP_SERVER_ADDRESS (expected 0x… address or .eth): ${addressOrEns}`);
@@ -40,20 +40,34 @@ async function resolveXmtpAddress(addressOrEns: string): Promise<string> {
   if (!resolved) {
     throw new Error(`Failed to resolve ENS name: ${trimmed}`);
   }
-  return resolved;
+  return ethers.utils.getAddress(resolved);
 }
 
 async function testXMTPIntegration() {
   const wallet = new ethers.Wallet(XMTP_TEST_SENDER_KEY);
   console.log(`Using sender wallet: ${wallet.address}`);
 
-  const xmtp = await Client.create(wallet, { env: XMTP_ENV });
+  const identifier = { identifier: wallet.address, identifierKind: IdentifierKind.Ethereum };
+  const signer: Signer = {
+    type: 'EOA',
+    signMessage: async (message) => ethers.utils.arrayify(await wallet.signMessage(message)),
+    getIdentifier: () => identifier,
+  };
+
+  const xmtp = await Client.create(signer, { env: XMTP_ENV, dbPath: null });
   console.log(`XMTP client ready (env=${XMTP_ENV})`);
 
   const botAddress = await resolveXmtpAddress(XMTP_BOT_ADDRESS_OR_ENS);
-  console.log(`Sending to bot: ${XMTP_BOT_ADDRESS_OR_ENS} (${botAddress})`);
+  const botInboxId = await getInboxIdForIdentifier(
+    { identifier: botAddress, identifierKind: IdentifierKind.Ethereum },
+    XMTP_ENV,
+  );
+  if (!botInboxId) throw new Error(`No XMTP inbox found for bot address: ${botAddress}`);
 
-  const conversation = await xmtp.conversations.newConversation(botAddress);
+  console.log(`Sending to bot: ${XMTP_BOT_ADDRESS_OR_ENS} (${botAddress}, inbox=${botInboxId})`);
+
+  const conversation = await xmtp.conversations.newDm(botInboxId);
+  conversation.updateConsentState(ConsentState.Allowed);
 
   const payload = {
     type: 'email.send.v1',

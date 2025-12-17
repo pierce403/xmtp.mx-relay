@@ -14,7 +14,8 @@ This repo is an always-on Node.js service that relays between Mailgun inbound SM
 - **Outbound (XMTP → SMTP):** Allowlisted XMTP senders send `email.send.v1` JSON to the bot → relay sends email via Mailgun → replies with `email.send.result.v1`.
 
 Persistence:
-- `DATA_DIR/relay.sqlite` stores relay state and XMTP keystore persistence (`xmtp_kv` table). For production, mount `DATA_DIR=/data`.
+- `DATA_DIR/relay.sqlite` stores relay state.
+- XMTP Node SDK stores its local DB under `DATA_DIR/` (`xmtp-<env>-<inbox-id>.db3`). For production, mount `DATA_DIR=/data`.
 
 ## Setup / Commands
 
@@ -31,7 +32,7 @@ Persistence:
 - `src/index.ts`: process entrypoint; starts HTTP server + XMTP loops
 - `src/httpServer.ts`: Express `/healthz` + Mailgun inbound webhook
 - `src/db.ts`: SQLite schema + idempotent insert/update helpers
-- `src/xmtpSqlitePersistence.ts`: XMTP `basePersistence` backed by SQLite (`xmtp_kv`)
+- `src/xmtp.ts`: ENS resolution + XMTP client helpers
 - `src/messages.ts`: Zod schemas + message formats (`email.send.v1`, result payload)
 - `scripts/fake-mailgun-inbound.js`: local webhook sender that signs payloads
 - `cf-worker/`: optional/older Worker-based implementation (not part of the Node service)

@@ -1,5 +1,5 @@
 import * as dotenv from 'dotenv';
-import type { Conversation, DecodedMessage } from '@xmtp/xmtp-js';
+import { ConsentState, type Client as XmtpClient, type Conversation, type DecodedMessage } from '@xmtp/node-sdk';
 import { RelayDb } from './db';
 import { loadConfig } from './config';
 import { DedupingQueue, sleep } from './queue';
@@ -7,8 +7,7 @@ import { log } from './log';
 import { makeEmailSendResultV1, emailSendV1Schema } from './messages';
 import { sendEmailViaMailgun } from './mailgunSend';
 import { startHttpServer } from './httpServer';
-import { XmtpSqlitePersistence } from './xmtpSqlitePersistence';
-import { createEnsProvider, createXmtpClient, resolveXmtpAddress } from './xmtp';
+import { createEnsProvider, createXmtpClient, getInboxIdByAddress, resolveXmtpAddress } from './xmtp';
 
 dotenv.config();
 
@@ -18,24 +17,33 @@ async function main(): Promise<void> {
 
   const provider = createEnsProvider(config.ethRpcUrl);
 
-  const deanAddress = await resolveXmtpAddress(config.xmtpDeanAddressOrEns, provider);
-  const allowlistResolved = await Promise.all(
-    config.xmtpAllowedSenders.map(async (value) => resolveXmtpAddress(value, provider)),
-  );
-  db.seedAllowlist(allowlistResolved.map((addr) => addr.toLowerCase()));
-
   const xmtp = await createXmtpClient({
     privateKey: config.xmtpBotKey,
     env: config.xmtpEnv,
-    basePersistence: new XmtpSqlitePersistence(db.raw()),
+    dataDir: config.dataDir,
   });
 
-  log.info({ address: xmtp.address }, 'xmtp.ready');
+  log.info({ inboxId: xmtp.inboxId, address: xmtp.accountIdentifier?.identifier ?? null }, 'xmtp.ready');
+
+  await xmtp.conversations.sync();
+
+  const deanAddress = await resolveXmtpAddress(config.xmtpDeanAddressOrEns, provider);
+  const deanInboxId = await getInboxIdByAddress({ xmtp, address: deanAddress });
+
+  const allowlistResolvedAddresses = await Promise.all(
+    config.xmtpAllowedSenders.map(async (value) => resolveXmtpAddress(value, provider)),
+  );
+  const allowlistInboxIds = await Promise.all(
+    allowlistResolvedAddresses.map(async (address) => getInboxIdByAddress({ xmtp, address })),
+  );
+  db.seedAllowlist([deanInboxId, ...allowlistInboxIds].map((inboxId) => inboxId.toLowerCase()));
 
   if (config.adminXmtpAddressOrEns) {
     try {
       const adminAddress = await resolveXmtpAddress(config.adminXmtpAddressOrEns, provider);
-      const convo = await xmtp.conversations.newConversation(adminAddress);
+      const adminInboxId = await getInboxIdByAddress({ xmtp, address: adminAddress });
+      const convo = await xmtp.conversations.newDm(adminInboxId);
+      convo.updateConsentState(ConsentState.Allowed);
       await convo.send(`XMTP-MX Relay started (${new Date().toISOString()})`);
     } catch (error) {
       log.warn({ error }, 'xmtp.admin_notify_failed');
@@ -49,11 +57,13 @@ async function main(): Promise<void> {
   refillInboundQueue();
 
   const getDeanConversation = (() => {
-    let cached: Conversation | null = null;
+    let cached: Conversation<any> | null = null;
     return async () => {
       if (cached) return cached;
-      cached = await xmtp.conversations.newConversation(deanAddress);
-      return cached;
+      const convo = await xmtp.conversations.newDm(deanInboxId);
+      convo.updateConsentState(ConsentState.Allowed);
+      cached = convo;
+      return convo;
     };
   })();
 
@@ -87,7 +97,7 @@ async function main(): Promise<void> {
 function startInboundDeliveryWorker(args: {
   db: RelayDb;
   inboundQueue: DedupingQueue<number>;
-  getDeanConversation: () => Promise<Conversation>;
+  getDeanConversation: () => Promise<Conversation<any>>;
 }): void {
   const { db, inboundQueue, getDeanConversation } = args;
 
@@ -134,7 +144,7 @@ function startInboundDeliveryWorker(args: {
 
 function startXmtpOutboundLoop(args: {
   db: RelayDb;
-  xmtp: { address: string; conversations: { streamAllMessages: () => Promise<AsyncGenerator<DecodedMessage>> } };
+  xmtp: XmtpClient<any>;
   mailgun: { apiKey: string; domain: string; from: string };
 }): void {
   const { db, xmtp, mailgun } = args;
@@ -142,9 +152,14 @@ function startXmtpOutboundLoop(args: {
   void (async () => {
     while (true) {
       try {
-        const stream = await xmtp.conversations.streamAllMessages();
+        const stream = await xmtp.conversations.streamAllMessages(
+          undefined,
+          undefined,
+          [ConsentState.Allowed, ConsentState.Unknown],
+        );
         for await (const message of stream) {
-          await handleXmtpMessage({ db, botAddress: xmtp.address, message, mailgun });
+          if (!message) continue;
+          await handleXmtpMessage({ db, botInboxId: xmtp.inboxId, xmtp, message, mailgun });
         }
       } catch (error) {
         log.error({ error }, 'xmtp.stream.crashed');
@@ -156,19 +171,24 @@ function startXmtpOutboundLoop(args: {
 
 async function handleXmtpMessage(args: {
   db: RelayDb;
-  botAddress: string;
-  message: DecodedMessage;
+  botInboxId: string;
+  xmtp: XmtpClient<any>;
+  message: DecodedMessage<any>;
   mailgun: { apiKey: string; domain: string; from: string };
 }): Promise<void> {
-  const { db, botAddress, message, mailgun } = args;
+  const { db, botInboxId, xmtp, message, mailgun } = args;
 
-  const sender = message.senderAddress.toLowerCase();
-  if (sender === botAddress.toLowerCase()) return;
+  const senderInboxId = message.senderInboxId.toLowerCase();
+  if (senderInboxId === botInboxId.toLowerCase()) return;
   if (typeof message.content !== 'string') return;
 
+  const conversation = await xmtp.conversations.getConversationById(message.conversationId);
+  if (!conversation) return;
+
   if (isGreetingMessage(message.content)) {
-    const allowlisted = db.isAllowlisted(sender);
-    await message.conversation.send(buildIntroMessage({ allowlisted }));
+    const allowlisted = db.isAllowlisted(senderInboxId);
+    conversation.updateConsentState(ConsentState.Allowed);
+    await conversation.send(buildIntroMessage({ allowlisted }));
     return;
   }
 
@@ -182,9 +202,9 @@ async function handleXmtpMessage(args: {
   const type = (parsedJson as { type?: unknown } | null)?.type;
   if (type !== 'email.send.v1') return;
 
-  if (!db.isAllowlisted(sender)) {
-    log.warn({ sender }, 'xmtp.outbound.denied');
-    await message.conversation.send(JSON.stringify(makeEmailSendResultV1({ ok: false, error: 'not_allowlisted' })));
+  if (!db.isAllowlisted(senderInboxId)) {
+    log.warn({ senderInboxId }, 'xmtp.outbound.denied');
+    await conversation.send(JSON.stringify(makeEmailSendResultV1({ ok: false, error: 'not_allowlisted' })));
     return;
   }
 
@@ -192,37 +212,33 @@ async function handleXmtpMessage(args: {
   try {
     request = emailSendV1Schema.parse(parsedJson);
   } catch (error) {
-    log.warn({ sender, error }, 'xmtp.outbound.invalid_payload');
-    await message.conversation.send(
-      JSON.stringify(makeEmailSendResultV1({ ok: false, error: 'invalid_payload' })),
-    );
+    log.warn({ senderInboxId, error }, 'xmtp.outbound.invalid_payload');
+    await conversation.send(JSON.stringify(makeEmailSendResultV1({ ok: false, error: 'invalid_payload' })));
     return;
   }
 
   const existing = db.getOutboundRequestByXmtpMsgId(message.id);
   if (existing) {
     if (existing.status === 'sent') {
-      await message.conversation.send(
+      await conversation.send(
         JSON.stringify(makeEmailSendResultV1({ ok: true, mailgunId: existing.mailgun_id })),
       );
       return;
     }
     if (existing.status === 'failed') {
-      await message.conversation.send(
+      await conversation.send(
         JSON.stringify(makeEmailSendResultV1({ ok: false, mailgunId: existing.mailgun_id, error: existing.error })),
       );
       return;
     }
-    await message.conversation.send(
-      JSON.stringify(makeEmailSendResultV1({ ok: false, error: 'already_processing' })),
-    );
+    await conversation.send(JSON.stringify(makeEmailSendResultV1({ ok: false, error: 'already_processing' })));
     return;
   }
 
   const now = new Date().toISOString();
   db.insertOutboundRequest({
     xmtpMsgId: message.id,
-    fromInbox: sender,
+    fromInbox: senderInboxId,
     to: request.to,
     cc: request.cc,
     bcc: request.bcc,
@@ -252,10 +268,8 @@ async function handleXmtpMessage(args: {
       { status: 'sent', mailgunId: result.id ?? null, error: null },
       new Date().toISOString(),
     );
-    await message.conversation.send(
-      JSON.stringify(makeEmailSendResultV1({ ok: true, mailgunId: result.id ?? null })),
-    );
-    log.info({ sender, mailgunId: result.id ?? null }, 'mailgun.sent');
+    await conversation.send(JSON.stringify(makeEmailSendResultV1({ ok: true, mailgunId: result.id ?? null })));
+    log.info({ senderInboxId, mailgunId: result.id ?? null }, 'mailgun.sent');
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
     db.updateOutboundRequestStatus(
@@ -263,8 +277,8 @@ async function handleXmtpMessage(args: {
       { status: 'failed', error: errMsg },
       new Date().toISOString(),
     );
-    await message.conversation.send(JSON.stringify(makeEmailSendResultV1({ ok: false, error: errMsg })));
-    log.error({ sender, error }, 'mailgun.send_failed');
+    await conversation.send(JSON.stringify(makeEmailSendResultV1({ ok: false, error: errMsg })));
+    log.error({ senderInboxId, error }, 'mailgun.send_failed');
   }
 }
 
@@ -284,8 +298,8 @@ function isGreetingMessage(content: string): boolean {
 
 function buildIntroMessage(args: { allowlisted: boolean }): string {
   const allowlistLine = args.allowlisted
-    ? 'Your address is allowlisted for outbound email.'
-    : 'Your address is NOT allowlisted for outbound email (ask the admin to add you).';
+    ? 'Your inbox is allowlisted for outbound email.'
+    : 'Your inbox is NOT allowlisted for outbound email (ask the admin to add you).';
 
   const example = {
     type: 'email.send.v1',
