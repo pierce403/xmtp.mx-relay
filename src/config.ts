@@ -22,6 +22,7 @@ export type Config = {
   xmtpBotKey: string;
   xmtpDeanAddressOrEns: string;
   xmtpAllowedSenders: string[];
+  allowlistBypass: boolean;
   adminXmtpAddressOrEns: string | null;
   ethRpcUrl: string;
   mailgunApiKey: string;
@@ -43,6 +44,7 @@ export function loadConfig(): Config {
     XMTP_PRIVATE_KEY: z.string().optional(),
     XMTP_DEAN_ADDRESS: z.string().min(1),
     XMTP_ALLOWED_SENDERS: z.string().optional(),
+    XMTP_ALLOWLIST_BYPASS: z.coerce.boolean().optional(),
     ADMIN_XMTP_ADDRESS: z.string().optional(),
     ETH_RPC_URL: z.string().optional(),
 
@@ -68,6 +70,8 @@ export function loadConfig(): Config {
     ? splitCsv(parsed.XMTP_ALLOWED_SENDERS)
     : [parsed.XMTP_DEAN_ADDRESS.trim()];
 
+  const allowlistBypass = parsed.XMTP_ALLOWLIST_BYPASS ?? false;
+
   const ethRpcUrl = parsed.ETH_RPC_URL?.trim() || 'https://ethereum.publicnode.com';
 
   const mailgunFrom = parsed.MAILGUN_FROM?.trim() || `XMTP-MX Relay <noreply@${parsed.MAILGUN_DOMAIN}>`;
@@ -80,6 +84,7 @@ export function loadConfig(): Config {
     xmtpBotKey,
     xmtpDeanAddressOrEns: parsed.XMTP_DEAN_ADDRESS.trim(),
     xmtpAllowedSenders: xmtpAllowedSendersRaw,
+    allowlistBypass,
     adminXmtpAddressOrEns: parsed.ADMIN_XMTP_ADDRESS?.trim() || null,
     ethRpcUrl,
     mailgunApiKey: parsed.MAILGUN_API_KEY.trim(),

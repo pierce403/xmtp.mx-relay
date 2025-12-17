@@ -46,6 +46,7 @@ See `.env.example`.
 - `XMTP_BOT_KEY`: bot wallet private key (hex, with or without `0x`)
 - `XMTP_DEAN_ADDRESS`: Dean recipient (`0x…` or `.eth`)
 - `XMTP_ALLOWED_SENDERS`: CSV allowlist (`0x…` and/or `.eth`)
+- `XMTP_ALLOWLIST_BYPASS`: set to `true` to disable outbound allowlist checks (testing only)
 - `ETH_RPC_URL`: optional mainnet RPC for ENS resolution (defaults to `https://ethereum.publicnode.com`)
 
 ## Deployment Notes (Railway)

@@ -66,6 +66,7 @@ Endpoints:
 
 - Mailgun webhook signature verification is required (`MAILGUN_WEBHOOK_SIGNING_KEY`).
 - Outbound sends are restricted to `XMTP_ALLOWED_SENDERS` (resolved to XMTP inbox IDs).
+- You can set `XMTP_ALLOWLIST_BYPASS=true` during local testing to permit any XMTP sender (do not enable in prod).
 - Webhook is rate-limited and size-limited via env vars.
 - Outbound email `From:` is forced to `MAILGUN_FROM` (never taken from user input).
 
