@@ -17,14 +17,12 @@
 
 ### XMTP → SMTP Outbound Relay
 - **Stability**: in-progress
-- **Description**: Allowlisted XMTP senders send `email.send.v1` JSON to the bot; relay sends a real email via Mailgun and replies with `email.send.result.v1`.
+- **Description**: Any XMTP sender can send `email.send.v1` JSON to the bot; the relay sends a real email via Mailgun and replies with `email.send.result.v1`.
 - **Properties**:
-  - Only allowlisted senders can trigger outbound email sends
   - Outbound requests are deduped by XMTP message id
   - Outbound emails always use `MAILGUN_FROM` (never user-provided `From`)
 - **Test Criteria**:
-  - [ ] Allowlisted sender triggers a single Mailgun send and gets a success result
-  - [ ] Non-allowlisted sender gets a denied result and no Mailgun send occurs
+  - [ ] Sender triggers a single Mailgun send and gets a success result
   - [ ] Replaying the same XMTP message id does not send a second email
 
 ### Persistence & Idempotency (SQLite)
@@ -88,3 +86,14 @@
   - Per-user allowlists and quotas
 - **Test Criteria**:
   - [ ] New user can complete verification and receive inbound email over XMTP
+  - [ ] Outbound sending is gated by token/allowlist verification
+
+### Token Gating (Outbound)
+- **Stability**: planned
+- **Description**: Require a token/credential check before allowing outbound sends.
+- **Properties**:
+  - Open by default; can be toggled to enforce token gating
+  - Denied requests return an explicit error
+- **Test Criteria**:
+  - [ ] Requests without the required token are rejected
+  - [ ] Valid token holders can send successfully

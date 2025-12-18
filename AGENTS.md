@@ -11,7 +11,7 @@ Capture both wins and misses (what to repeat, what to avoid), plus collaborator 
 This repo is an always-on Node.js service that relays between Mailgun inbound SMTP and XMTP:
 
 - **Inbound (SMTP → XMTP):** Mailgun POSTs inbound email → signature verified → normalized → stored/deduped in SQLite → delivered to Dean over XMTP as `email.inbound.v1` JSON.
-- **Outbound (XMTP → SMTP):** Allowlisted XMTP senders send `email.send.v1` JSON to the bot → relay sends email via Mailgun → replies with `email.send.result.v1`.
+- **Outbound (XMTP → SMTP):** Any XMTP sender can send `email.send.v1` JSON to the bot → relay sends email via Mailgun → replies with `email.send.result.v1`.
 
 Persistence:
 - `DATA_DIR/relay.sqlite` stores relay state.
@@ -45,7 +45,6 @@ See `.env.example`.
 - `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `MAILGUN_WEBHOOK_SIGNING_KEY`, `MAILGUN_FROM`
 - `XMTP_BOT_KEY`: bot wallet private key (hex, with or without `0x`)
 - `XMTP_DEAN_ADDRESS`: Dean recipient (`0x…` or `.eth`)
-- `XMTP_ALLOWED_SENDERS`: CSV allowlist (`0x…` and/or `.eth`)
 - `ETH_RPC_URL`: optional mainnet RPC for ENS resolution (defaults to `https://ethereum.publicnode.com`)
 
 ## Deployment Notes (Railway)

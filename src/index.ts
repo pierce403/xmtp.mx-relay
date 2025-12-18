@@ -30,14 +30,6 @@ async function main(): Promise<void> {
   const deanAddress = await resolveXmtpAddress(config.xmtpDeanAddressOrEns, provider);
   const deanInboxId = await getInboxIdByAddress({ xmtp, address: deanAddress });
 
-  const allowlistResolvedAddresses = await Promise.all(
-    config.xmtpAllowedSenders.map(async (value) => resolveXmtpAddress(value, provider)),
-  );
-  const allowlistInboxIds = await Promise.all(
-    allowlistResolvedAddresses.map(async (address) => getInboxIdByAddress({ xmtp, address })),
-  );
-  db.seedAllowlist([deanInboxId, ...allowlistInboxIds].map((inboxId) => inboxId.toLowerCase()));
-
   if (config.adminXmtpAddressOrEns) {
     try {
       const adminAddress = await resolveXmtpAddress(config.adminXmtpAddressOrEns, provider);
@@ -186,9 +178,8 @@ async function handleXmtpMessage(args: {
   if (!conversation) return;
 
   if (isGreetingMessage(message.content)) {
-    const allowlisted = db.isAllowlisted(senderInboxId);
     conversation.updateConsentState(ConsentState.Allowed);
-    await conversation.send(buildIntroMessage({ allowlisted }));
+    await conversation.send(buildIntroMessage());
     return;
   }
 
@@ -201,12 +192,6 @@ async function handleXmtpMessage(args: {
 
   const type = (parsedJson as { type?: unknown } | null)?.type;
   if (type !== 'email.send.v1') return;
-
-  if (!db.isAllowlisted(senderInboxId)) {
-    log.warn({ senderInboxId }, 'xmtp.outbound.denied');
-    await conversation.send(JSON.stringify(makeEmailSendResultV1({ ok: false, error: 'not_allowlisted' })));
-    return;
-  }
 
   let request;
   try {
@@ -296,11 +281,7 @@ function isGreetingMessage(content: string): boolean {
   return false;
 }
 
-function buildIntroMessage(args: { allowlisted: boolean }): string {
-  const allowlistLine = args.allowlisted
-    ? 'Your inbox is allowlisted for outbound email.'
-    : 'Your inbox is NOT allowlisted for outbound email (ask the admin to add you).';
-
+function buildIntroMessage(): string {
   const example = {
     type: 'email.send.v1',
     to: ['someone@example.com'],
@@ -322,7 +303,7 @@ function buildIntroMessage(args: { allowlisted: boolean }): string {
   return [
     'Hello — I am the xmtp.mx relay bot.',
     '',
-    allowlistLine,
+    'Outbound email is currently open to any XMTP sender (no allowlist enforced).',
     '',
     'To send an email, send me a JSON message like:',
     JSON.stringify(example, null, 2),

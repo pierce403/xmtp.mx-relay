@@ -3,17 +3,6 @@ import { z } from 'zod';
 
 const xmtpEnvSchema = z.enum(['production', 'dev', 'local']);
 
-function splitCsv(value: string): string[] {
-  return value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function isHexAddress(value: string): boolean {
-  return /^0x[a-fA-F0-9]{40}$/.test(value.trim());
-}
-
 export type Config = {
   port: number;
   dataDir: string;
@@ -21,7 +10,6 @@ export type Config = {
   xmtpEnv: z.infer<typeof xmtpEnvSchema>;
   xmtpBotKey: string;
   xmtpDeanAddressOrEns: string;
-  xmtpAllowedSenders: string[];
   adminXmtpAddressOrEns: string | null;
   ethRpcUrl: string;
   mailgunApiKey: string;
@@ -42,7 +30,6 @@ export function loadConfig(): Config {
     XMTP_BOT_KEY: z.string().optional(),
     XMTP_PRIVATE_KEY: z.string().optional(),
     XMTP_DEAN_ADDRESS: z.string().min(1),
-    XMTP_ALLOWED_SENDERS: z.string().optional(),
     ADMIN_XMTP_ADDRESS: z.string().optional(),
     ETH_RPC_URL: z.string().optional(),
 
@@ -64,10 +51,6 @@ export function loadConfig(): Config {
     throw new Error('Missing env var: XMTP_BOT_KEY (or XMTP_PRIVATE_KEY)');
   }
 
-  const xmtpAllowedSendersRaw = parsed.XMTP_ALLOWED_SENDERS?.trim()
-    ? splitCsv(parsed.XMTP_ALLOWED_SENDERS)
-    : [parsed.XMTP_DEAN_ADDRESS.trim()];
-
   const ethRpcUrl = parsed.ETH_RPC_URL?.trim() || 'https://ethereum.publicnode.com';
 
   const mailgunFrom = parsed.MAILGUN_FROM?.trim() || `XMTP-MX Relay <noreply@${parsed.MAILGUN_DOMAIN}>`;
@@ -79,7 +62,6 @@ export function loadConfig(): Config {
     xmtpEnv: parsed.XMTP_ENV,
     xmtpBotKey,
     xmtpDeanAddressOrEns: parsed.XMTP_DEAN_ADDRESS.trim(),
-    xmtpAllowedSenders: xmtpAllowedSendersRaw,
     adminXmtpAddressOrEns: parsed.ADMIN_XMTP_ADDRESS?.trim() || null,
     ethRpcUrl,
     mailgunApiKey: parsed.MAILGUN_API_KEY.trim(),
