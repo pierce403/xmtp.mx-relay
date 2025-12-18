@@ -85,7 +85,7 @@ function ensurePinnedInboxId(dataDir: string, inboxId: string): void {
 
 function isMaxInstallationsError(error: unknown): { inboxId: string } | null {
   const message = error instanceof Error ? error.message : String(error);
-  const match = message.match(/InboxID\\s+([0-9a-f]{64})/i);
+  const match = message.match(/InboxID\s+([0-9a-f]{64})/i);
   if (!match) return null;
   if (!message.toLowerCase().includes('installations')) return null;
   return { inboxId: match[1] };
