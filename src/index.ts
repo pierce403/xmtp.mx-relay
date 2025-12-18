@@ -14,14 +14,6 @@ dotenv.config();
 async function main(): Promise<void> {
   const config = loadConfig();
   const db = RelayDb.open(config.dataDir);
-  const allowlist = {
-    bypass: config.allowlistBypass,
-    isAllowlisted: (senderInboxId: string) => config.allowlistBypass || db.isAllowlisted(senderInboxId),
-  };
-
-  if (allowlist.bypass) {
-    log.warn('XMTP allowlist bypass enabled: all senders are permitted (testing mode).');
-  }
 
   const provider = createEnsProvider(config.ethRpcUrl);
 
@@ -37,14 +29,6 @@ async function main(): Promise<void> {
 
   const deanAddress = await resolveXmtpAddress(config.xmtpDeanAddressOrEns, provider);
   const deanInboxId = await getInboxIdByAddress({ xmtp, address: deanAddress });
-
-  const allowlistResolvedAddresses = await Promise.all(
-    config.xmtpAllowedSenders.map(async (value) => resolveXmtpAddress(value, provider)),
-  );
-  const allowlistInboxIds = await Promise.all(
-    allowlistResolvedAddresses.map(async (address) => getInboxIdByAddress({ xmtp, address })),
-  );
-  db.seedAllowlist([deanInboxId, ...allowlistInboxIds].map((inboxId) => inboxId.toLowerCase()));
 
   if (config.adminXmtpAddressOrEns) {
     try {
@@ -94,7 +78,6 @@ async function main(): Promise<void> {
   startXmtpOutboundLoop({
     db,
     xmtp,
-    allowlist,
     mailgun: {
       apiKey: config.mailgunApiKey,
       domain: config.mailgunDomain,
@@ -154,10 +137,9 @@ function startInboundDeliveryWorker(args: {
 function startXmtpOutboundLoop(args: {
   db: RelayDb;
   xmtp: XmtpClient<any>;
-  allowlist: { bypass: boolean; isAllowlisted: (senderInboxId: string) => boolean };
   mailgun: { apiKey: string; domain: string; from: string };
 }): void {
-  const { db, xmtp, mailgun, allowlist } = args;
+  const { db, xmtp, mailgun } = args;
 
   void (async () => {
     while (true) {
@@ -169,7 +151,7 @@ function startXmtpOutboundLoop(args: {
         );
         for await (const message of stream) {
           if (!message) continue;
-          await handleXmtpMessage({ db, botInboxId: xmtp.inboxId, xmtp, message, mailgun, allowlist });
+          await handleXmtpMessage({ db, botInboxId: xmtp.inboxId, xmtp, message, mailgun });
         }
       } catch (error) {
         log.error({ error }, 'xmtp.stream.crashed');
@@ -185,9 +167,8 @@ async function handleXmtpMessage(args: {
   xmtp: XmtpClient<any>;
   message: DecodedMessage<any>;
   mailgun: { apiKey: string; domain: string; from: string };
-  allowlist: { bypass: boolean; isAllowlisted: (senderInboxId: string) => boolean };
 }): Promise<void> {
-  const { db, botInboxId, xmtp, message, mailgun, allowlist } = args;
+  const { db, botInboxId, xmtp, message, mailgun } = args;
 
   const senderInboxId = message.senderInboxId.toLowerCase();
   if (senderInboxId === botInboxId.toLowerCase()) return;
@@ -197,9 +178,8 @@ async function handleXmtpMessage(args: {
   if (!conversation) return;
 
   if (isGreetingMessage(message.content)) {
-    const allowlisted = allowlist.isAllowlisted(senderInboxId);
     conversation.updateConsentState(ConsentState.Allowed);
-    await conversation.send(buildIntroMessage({ allowlisted, allowlistBypass: allowlist.bypass }));
+    await conversation.send(buildIntroMessage());
     return;
   }
 
@@ -212,12 +192,6 @@ async function handleXmtpMessage(args: {
 
   const type = (parsedJson as { type?: unknown } | null)?.type;
   if (type !== 'email.send.v1') return;
-
-  if (!allowlist.isAllowlisted(senderInboxId)) {
-    log.warn({ senderInboxId }, 'xmtp.outbound.denied');
-    await conversation.send(JSON.stringify(makeEmailSendResultV1({ ok: false, error: 'not_allowlisted' })));
-    return;
-  }
 
   let request;
   try {
@@ -307,13 +281,7 @@ function isGreetingMessage(content: string): boolean {
   return false;
 }
 
-function buildIntroMessage(args: { allowlisted: boolean; allowlistBypass: boolean }): string {
-  const allowlistLine = args.allowlistBypass
-    ? 'Outbound allowlist is DISABLED (testing mode).'
-    : args.allowlisted
-      ? 'Your inbox is allowlisted for outbound email.'
-      : 'Your inbox is NOT allowlisted for outbound email (ask the admin to add you).';
-
+function buildIntroMessage(): string {
   const example = {
     type: 'email.send.v1',
     to: ['someone@example.com'],
@@ -335,7 +303,7 @@ function buildIntroMessage(args: { allowlisted: boolean; allowlistBypass: boolea
   return [
     'Hello — I am the xmtp.mx relay bot.',
     '',
-    allowlistLine,
+    'Outbound email is currently open to any XMTP sender (no allowlist enforced).',
     '',
     'To send an email, send me a JSON message like:',
     JSON.stringify(example, null, 2),
