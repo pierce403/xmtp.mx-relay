@@ -11,6 +11,7 @@ import {
 } from '@xmtp/node-sdk';
 import { ethers } from 'ethers';
 import type { XmtpEnv } from './xmtpEnv';
+import { log } from './log';
 
 const DEFAULT_MAINNET_RPC_URL = 'https://ethereum.publicnode.com';
 const PINNED_INBOX_ID_FILENAME = 'xmtp-inbox-id.txt';
@@ -204,7 +205,11 @@ export async function createXmtpClient(args: {
     });
     ensurePinnedInboxId(args.dataDir, xmtp.inboxId);
     if (enforceSingleInstallation) {
-      await xmtp.revokeAllOtherInstallations();
+      try {
+        await xmtp.revokeAllOtherInstallations();
+      } catch (error) {
+        log.warn({ error }, 'xmtp.revoke_all_other_installations_failed');
+      }
     }
     return xmtp;
   } catch (error) {
@@ -223,7 +228,11 @@ export async function createXmtpClient(args: {
         dbEncryptionKey: deriveDbEncryptionKey(privateKeyHex),
       });
       ensurePinnedInboxId(args.dataDir, xmtp.inboxId);
-      await xmtp.revokeAllOtherInstallations();
+      try {
+        await xmtp.revokeAllOtherInstallations();
+      } catch (error) {
+        log.warn({ error }, 'xmtp.revoke_all_other_installations_failed');
+      }
       return xmtp;
     }
     throw error;
