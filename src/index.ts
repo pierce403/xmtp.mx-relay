@@ -6,7 +6,7 @@ import { DedupingQueue, sleep } from './queue';
 import { log } from './log';
 import { makeEmailSendResultV1, emailSendV1Schema } from './messages';
 import { sendEmailViaMailgun } from './mailgunSend';
-import { startHttpServer } from './httpServer';
+import { startHttpServer, type PublicConfig } from './httpServer';
 import { createEnsProvider, createXmtpClient, getInboxIdByAddress, resolveXmtpAddress } from './xmtp';
 
 dotenv.config();
@@ -65,6 +65,20 @@ async function main(): Promise<void> {
     getDeanConversation,
   });
 
+  const publicConfig: PublicConfig = {
+    port: config.port,
+    dataDir: config.dataDir,
+    inboundEmailTo: config.inboundEmailTo,
+    xmtpEnv: config.xmtpEnv,
+    xmtpDeanAddressOrEns: config.xmtpDeanAddressOrEns,
+    adminXmtpAddressOrEns: config.adminXmtpAddressOrEns,
+    ethRpcUrl: config.ethRpcUrl,
+    mailgunDomain: config.mailgunDomain,
+    mailgunFrom: config.mailgunFrom,
+    webhookRateLimit: config.webhookRateLimit,
+    maxInboundFieldSizeBytes: config.maxInboundFieldSizeBytes,
+  };
+
   await startHttpServer({
     db,
     port: config.port,
@@ -73,6 +87,7 @@ async function main(): Promise<void> {
     enqueueInboundEmail: (id) => inboundQueue.enqueue(id),
     webhookRateLimit: config.webhookRateLimit,
     maxInboundFieldSizeBytes: config.maxInboundFieldSizeBytes,
+    publicConfig,
   });
 
   startXmtpOutboundLoop({
