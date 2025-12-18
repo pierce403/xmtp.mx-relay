@@ -272,6 +272,16 @@ export class RelayDb {
       )
       .run(update.status, update.mailgunId ?? null, update.error ?? null, updatedAt, xmtpMsgId);
   }
+
+  countInboundEmails(): number {
+    const row = this.db.prepare('SELECT COUNT(*) as count FROM inbound_email').get() as { count: number };
+    return row.count;
+  }
+
+  countInboundXmtpMessages(): number {
+    const row = this.db.prepare('SELECT COUNT(*) as count FROM outbound_request').get() as { count: number };
+    return row.count;
+  }
 }
 
 function computeInboundDedupeKey(input: InboundEmailInsert): string {

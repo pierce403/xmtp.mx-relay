@@ -15,6 +15,7 @@ export type HttpServerDeps = {
   enqueueInboundEmail: (id: number) => void;
   webhookRateLimit: { windowMs: number; max: number };
   maxInboundFieldSizeBytes: number;
+  publicConfig: PublicConfig;
 };
 
 export async function startHttpServer(deps: HttpServerDeps): Promise<Server> {
@@ -28,6 +29,17 @@ export async function startHttpServer(deps: HttpServerDeps): Promise<Server> {
     (req as RequestWithId).id = requestId;
     res.setHeader('x-request-id', requestId);
     next();
+  });
+
+  app.get('/', (_req, res) => {
+    res.status(200).json({
+      ok: true,
+      config: deps.publicConfig,
+      stats: {
+        inboundEmails: deps.db.countInboundEmails(),
+        inboundXmtpMessages: deps.db.countInboundXmtpMessages(),
+      },
+    });
   });
 
   app.get('/healthz', (_req, res) => {
@@ -118,3 +130,16 @@ export async function startHttpServer(deps: HttpServerDeps): Promise<Server> {
 
 type RequestWithId = express.Request & { id: string };
 
+export type PublicConfig = {
+  port: number;
+  dataDir: string;
+  inboundEmailTo: string;
+  xmtpEnv: string;
+  xmtpDeanAddressOrEns: string;
+  adminXmtpAddressOrEns: string | null;
+  ethRpcUrl: string;
+  mailgunDomain: string;
+  mailgunFrom: string;
+  webhookRateLimit: { windowMs: number; max: number };
+  maxInboundFieldSizeBytes: number;
+};
