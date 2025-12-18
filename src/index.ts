@@ -174,7 +174,11 @@ function startXmtpOutboundLoop(args: {
         );
         for await (const message of stream) {
           if (!message) continue;
-          await handleXmtpMessage({ db, botInboxId: xmtp.inboxId, xmtp, message, mailgun });
+          try {
+            await handleXmtpMessage({ db, botInboxId: xmtp.inboxId, xmtp, message, mailgun });
+          } catch (error) {
+            log.error({ error, xmtpMsgId: message.id }, 'xmtp.message.handler_failed');
+          }
         }
       } catch (error) {
         log.error({ error }, 'xmtp.stream.crashed');
@@ -197,27 +201,58 @@ async function handleXmtpMessage(args: {
   if (senderInboxId === botInboxId.toLowerCase()) return;
   if (typeof message.content !== 'string') return;
 
-  const conversation = await xmtp.conversations.getConversationById(message.conversationId);
-  if (!conversation) return;
+  log.debug(
+    {
+      xmtpMsgId: message.id,
+      senderInboxId,
+      conversationId: message.conversationId,
+      contentLength: message.content.length,
+    },
+    'xmtp.message.received',
+  );
 
-  if (isGreetingMessage(message.content)) {
-    conversation.updateConsentState(ConsentState.Allowed);
-    const allowlisted = db.isAllowlisted(senderInboxId);
-    await conversation.send(buildIntroMessage({ allowlisted }));
+  const conversation = await xmtp.conversations.getConversationById(message.conversationId);
+  if (!conversation) {
+    log.warn({ xmtpMsgId: message.id, senderInboxId }, 'xmtp.message.conversation_not_found');
     return;
   }
 
-  let parsedJson: unknown;
-  try {
-    parsedJson = JSON.parse(message.content);
-  } catch {
+  const content = message.content.trim();
+  if (!content) return;
+
+  const allowlisted = db.isAllowlisted(senderInboxId);
+
+  if (isGreetingMessage(content)) {
+    conversation.updateConsentState(ConsentState.Allowed);
+    await conversation.send(buildIntroMessage({ allowlisted }));
+    log.info({ xmtpMsgId: message.id, senderInboxId, allowlisted }, 'xmtp.message.replied_intro');
+    return;
+  }
+
+  const parsedJson = parseJsonishMessage(content);
+  if (!parsedJson) {
+    conversation.updateConsentState(ConsentState.Allowed);
+    await conversation.send(buildIntroMessage({ allowlisted }));
+    log.info({ xmtpMsgId: message.id, senderInboxId, allowlisted, reason: 'non_json' }, 'xmtp.message.replied_help');
     return;
   }
 
   const type = (parsedJson as { type?: unknown } | null)?.type;
-  if (type !== 'email.send.v1') return;
+  if (type !== 'email.send.v1') {
+    conversation.updateConsentState(ConsentState.Allowed);
+    const header =
+      typeof type === 'string'
+        ? `Unrecognized message type: ${type}`
+        : 'Unrecognized message type (missing `type`)';
+    await conversation.send([header, '', buildIntroMessage({ allowlisted })].join('\n'));
+    log.info(
+      { xmtpMsgId: message.id, senderInboxId, allowlisted, type, reason: 'unknown_type' },
+      'xmtp.message.replied_help',
+    );
+    return;
+  }
 
-  if (!db.isAllowlisted(senderInboxId)) {
+  if (!allowlisted) {
     log.warn({ senderInboxId }, 'xmtp.outbound.denied');
     await conversation.send(JSON.stringify(makeEmailSendResultV1({ ok: false, error: 'not_allowlisted' })));
     return;
@@ -301,14 +336,57 @@ function isGreetingMessage(content: string): boolean {
   const trimmed = content.trim();
   if (!trimmed) return false;
   // Avoid matching JSON payloads that happen to contain "hello".
-  if (trimmed.startsWith('{')) return false;
+  if (trimmed.startsWith('{') || trimmed.startsWith('```')) return false;
 
   const lower = trimmed.toLowerCase();
-  if (lower === 'hello' || lower === 'hi' || lower === 'hey' || lower === 'help') return true;
-  if (lower.startsWith('hello ')) return true;
-  if (lower.startsWith('hi ')) return true;
-  if (lower.startsWith('hey ')) return true;
-  return false;
+  if (lower === '?') return true;
+  return /^(hello|hi|hey|help|start|info)(\b|[^a-z0-9])/i.test(lower);
+}
+
+function parseJsonishMessage(content: string): unknown | null {
+  const direct = tryParseJson(content);
+  if (direct !== null) return direct;
+
+  const unfenced = stripMarkdownCodeFences(content);
+  if (unfenced) {
+    const parsed = tryParseJson(unfenced);
+    if (parsed !== null) return parsed;
+  }
+
+  const extracted = extractJsonSubstring(content);
+  if (extracted) {
+    const parsed = tryParseJson(extracted);
+    if (parsed !== null) return parsed;
+  }
+
+  return null;
+}
+
+function tryParseJson(value: string): unknown | null {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function stripMarkdownCodeFences(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('```')) return null;
+  const lastFenceIndex = trimmed.lastIndexOf('```');
+  if (lastFenceIndex <= 0) return null;
+  const firstNewlineIndex = trimmed.indexOf('\n');
+  if (firstNewlineIndex < 0) return null;
+  const inner = trimmed.slice(firstNewlineIndex + 1, lastFenceIndex).trim();
+  return inner || null;
+}
+
+function extractJsonSubstring(value: string): string | null {
+  const trimmed = value.trim();
+  const firstBrace = trimmed.indexOf('{');
+  const lastBrace = trimmed.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace > firstBrace) return trimmed.slice(firstBrace, lastBrace + 1);
+  return null;
 }
 
 function buildIntroMessage(args: { allowlisted: boolean }): string {
