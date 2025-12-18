@@ -66,6 +66,7 @@ See `.env.example`.
 - 2025-12-17: `express-rate-limit` latest major is v8 (v7.5.2 does not exist on npm); keep it aligned with `package-lock.json`.
 - 2025-12-17: Use `@types/express@4` (Express 5 types can mismatch Express 4 runtime).
 - 2025-12-17: `mailgun.js` types require at least one of `text/html/message/template`; send `text: ''` when only HTML is present.
+- 2025-12-18: Mailgun 401/403 errors surface as `Unauthorized`; include status and credential/region hints in user-facing errors when propagating Mailgun failures.
 
 ## Agent Tips
 

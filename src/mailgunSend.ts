@@ -32,6 +32,22 @@ export async function sendEmailViaMailgun(input: MailgunSendEmailInput): Promise
   if (input.html !== null) data.html = input.html;
   if (input.replyTo) data['h:Reply-To'] = input.replyTo;
 
-  const response = (await mg.messages.create(input.domain, data)) as unknown as { id?: string };
-  return { id: response.id ?? null };
+  try {
+    const response = (await mg.messages.create(input.domain, data)) as unknown as { id?: string };
+    return { id: response.id ?? null };
+  } catch (error) {
+    const status = (error as { status?: number | string; statusCode?: number | string } | null)?.statusCode
+      ?? (error as { status?: number | string } | null)?.status;
+    const baseMessage = error instanceof Error ? error.message : String(error);
+
+    if (status === 401 || status === 403) {
+      throw new Error(
+        `Mailgun unauthorized (status ${status}). Check MAILGUN_API_KEY, MAILGUN_DOMAIN, region, and sending permissions.`,
+      );
+    }
+
+    throw new Error(
+      `Mailgun send failed${status ? ` (status ${status})` : ''}: ${baseMessage}`,
+    );
+  }
 }
