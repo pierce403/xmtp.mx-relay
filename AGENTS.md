@@ -45,6 +45,10 @@ See `.env.example`.
 - `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `MAILGUN_WEBHOOK_SIGNING_KEY`, `MAILGUN_FROM`
 - `XMTP_BOT_KEY`: bot wallet private key (hex, with or without `0x`)
 - `XMTP_DEAN_ADDRESS`: Dean recipient (`0x…` or `.eth`)
+- `XMTP_ALLOWED_SENDERS`: CSV allowlist (`0x…` and/or `.eth`)
+- `XMTP_ALLOW_NEW_INSTALLATION`: set `true` only for first-ever prod deploy (allows registering a new XMTP installation if no local XMTP DB exists)
+- `XMTP_EMERGENCY_REVOKE_INSTALLATIONS`: set `true` to auto-recover from the 10-installation limit (revokes older installations, then registers a new one)
+- `XMTP_ENFORCE_SINGLE_INSTALLATION`: set `true` to keep the inbox limited to a single installation (revokes all other installations on startup)
 - `ETH_RPC_URL`: optional mainnet RPC for ENS resolution (defaults to `https://ethereum.publicnode.com`)
 
 ## Deployment Notes (Railway)
@@ -58,6 +62,8 @@ See `.env.example`.
 
 - `better-sqlite3` is a native module: Docker build installs `python3 make g++` (already in `Dockerfile`).
 - ENS resolution uses `ETH_RPC_URL` (defaults to PublicNode mainnet RPC).
+- XMTP Node SDK enforces a 10-installation limit per inbox. If you don't persist `DATA_DIR`, each deploy can burn a new installation slot.
+- `DATA_DIR/xmtp-inbox-id.txt` pins the inbox ID to avoid accidentally running the relay under a different inbox/key.
 - Mailgun inbound payload can be `multipart/form-data` or urlencoded; attachments are currently ignored (v1).
 - Keep idempotency intact: inbound dedupe uses Mailgun `message-id`/`Message-Id`; outbound dedupe uses XMTP `message.id`.
 

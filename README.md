@@ -5,7 +5,7 @@ Bidirectional relay between SMTP (Mailgun) and XMTP.
 ## Overview
 
 - **Inbound (SMTP → XMTP):** Email to `INBOUND_EMAIL_TO` is forwarded by Mailgun to `POST /webhooks/mailgun/inbound`, verified, normalized, stored in SQLite, then delivered to `XMTP_DEAN_ADDRESS` as a structured `email.inbound.v1` JSON message.
-- **Outbound (XMTP → SMTP):** Any XMTP sender can send `email.send.v1` JSON to the bot; the relay sends a real email via Mailgun and replies with `email.send.result.v1`.
+- **Outbound (XMTP → SMTP):** Allowlisted XMTP senders can send `email.send.v1` JSON to the bot; the relay sends a real email via Mailgun and replies with `email.send.result.v1`.
 
 Persistence:
 - Relay state is stored in `DATA_DIR/relay.sqlite` (mount `DATA_DIR=/data` on Railway).
@@ -65,7 +65,7 @@ Endpoints:
 ## Security defaults
 
 - Mailgun webhook signature verification is required (`MAILGUN_WEBHOOK_SIGNING_KEY`).
-- Outbound sends are currently open to any XMTP sender (no allowlist enforced). Token gating is planned for the future.
+- Outbound sends are restricted to `XMTP_ALLOWED_SENDERS` (resolved to XMTP inbox IDs).
 - Webhook is rate-limited and size-limited via env vars.
 - Outbound email `From:` is forced to `MAILGUN_FROM` (never taken from user input).
 
@@ -73,6 +73,7 @@ Endpoints:
 
 1. Use the included `Dockerfile`.
 2. Mount a persistent volume at `/data` and set `DATA_DIR=/data`.
+   - XMTP enforces a 10-installation limit per inbox. If you don't persist `DATA_DIR`, each deploy can burn a new installation slot.
 3. Set required env vars in Railway.
 4. Configure Mailgun to forward inbound email for `INBOUND_EMAIL_TO` to:
    - `POST https://<your-public-domain>/webhooks/mailgun/inbound`

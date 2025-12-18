@@ -11,6 +11,7 @@
     "cf:dev": "wrangler dev --test-scheduled --config cf-worker/wrangler.toml",
     "cf:deploy": "wrangler deploy --config cf-worker/wrangler.toml",
     "test:integration": "ts-node test_integration.ts",
+    "xmtp:revoke-installations": "node dist/recoverXmtpInstallations.js",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],
