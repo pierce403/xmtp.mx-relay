@@ -6,9 +6,9 @@ activation receipt.
 
 ## Source and validation
 
-- Relay source: `ce408497ce8c0d62d4fcea724b11d5fd0d07132f` on `main`
-- GitHub validation: run `33084377610`, successful
-- Cloudflare Worker tests: 73 passed
+- Relay source: `e1846ac51a20ec1925e1a301f7e6447fa1c98e08` on `main`
+- GitHub validation: run `33087299733`, successful
+- Cloudflare Worker tests: 75 passed
 - Cross-layer Worker tests: 33 passed
 - Cloudflare smoke harness: 14 passed
 - Container tests: 45 passed
@@ -27,7 +27,7 @@ activation receipt.
 - Edge Worker: `xmtp-mx-relay-edge`
   (`https://xmtp-mx-relay-edge.bcrt43.workers.dev`)
 - First deployed code version: `e5f5c44e-fb33-4a1d-817f-13e1befbacfc`
-- Current version after secret updates: `6c043d2b-4773-4cf7-83c5-303c7715e574`
+- Current version with both inbound aliases: `1423b609-bc48-41c8-b281-a0f3ee8ea091`
 - Container application: `a0363b9f-d19a-45cd-ab81-1ded7a59399e`
 - Container image: `sha256:4c0dece9178ce169027f1a7ef2279eef700e4367c2cb0f1b5d99472144d30acf`
 
@@ -52,8 +52,15 @@ Inbound Email Routing is enabled:
 - apex SPF and `cf2024-1._domainkey` DKIM exist on the authoritative nameserver;
 - rule `56de1718b0074d839246aea6add9eb21` matches only
   `deanpierce.eth@xmtp.mx` and invokes `xmtp-mx-relay-edge`;
+- rule `c6af7f7821494b47b7d978784b6c72d4` matches only
+  `deanpierce@xmtp.mx` and invokes the same Worker;
 - catch-all disabled with drop action;
 - Worker `/healthz` returns HTTP 200.
+
+The Worker allowlist contains exactly those two addresses. Neither creates a
+job-level XMTP recipient override, so both resolve through
+`XMTP_DEAN_ADDRESS=deanpierce.eth` and reach the same XMTP identity after the
+listener is explicitly activated.
 
 While the watchdog is paused or unconfigured, the Worker commits accepted SMTP
 mail and its delivery job to D1 with status `received` without publishing to
