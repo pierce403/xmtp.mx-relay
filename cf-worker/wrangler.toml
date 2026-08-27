@@ -17,7 +17,7 @@ enabled = true
 invocation_logs = true
 
 [vars]
-INBOUND_EMAIL_TO = "deanpierce.eth@xmtp.mx"
+INBOUND_EMAIL_TO = "deanpierce.eth@xmtp.mx,deanpierce@xmtp.mx"
 EMAIL_FROM = "Dean (XMTP) <deanpierce.eth@xmtp.mx>"
 XMTP_ALLOWED_SENDERS = ""
 XMTP_ENV = "production"

@@ -193,7 +193,7 @@ In the Cloudflare dashboard:
 1. Onboard `xmtp.mx` and the controlled sender `deanpierce.eth@xmtp.mx` for Cloudflare Email Service.
 2. Confirm the native `EMAIL` binding can send only from that address.
 3. Seed and verify the durable watchdog pause, then deploy the Worker without starting the Container.
-4. Configure one literal Email Routing rule for `deanpierce.eth@xmtp.mx` to invoke `xmtp-mx-relay-edge` and enable Cloudflare's apex MX records.
+4. Configure literal Email Routing rules for `deanpierce.eth@xmtp.mx` and `deanpierce@xmtp.mx` to invoke `xmtp-mx-relay-edge`, and enable Cloudflare's apex MX records. `INBOUND_EMAIL_TO` contains the same comma-separated addresses; both deliver to the configured `XMTP_DEAN_ADDRESS`.
 5. Verify MX, SPF, DKIM, and DMARC with independent DNS plus a real SMTP message and D1 read-back.
 
 The Worker forces `EMAIL_FROM`; an XMTP request cannot select an arbitrary From address. It preserves `to`, `cc`, `bcc`, `subject`, `text`, `html`, and `replyTo`. `email.send.result.v1.providerMessageId` contains the native Cloudflare Email Service `messageId`.

@@ -93,25 +93,52 @@ describe('inbound durable handoff boundary', () => {
     expect(queueSend).not.toHaveBeenCalled();
     expect(db.markDeliveryQueued).not.toHaveBeenCalled();
   });
+
+  it('accepts the deanpierce alias and publishes it to the same XMTP delivery path', async () => {
+    const queueSend = vi.fn();
+    const message = inboundMessage('deanpierce@xmtp.mx');
+
+    await expect(handleInboundEmail(message, makeEnv(queueSend))).resolves.toBeUndefined();
+
+    expect(queueSend).toHaveBeenCalledWith({
+      version: 1,
+      kind: 'xmtp_delivery',
+      jobId: 'inbound:7',
+    });
+    expect(message.setReject).not.toHaveBeenCalled();
+  });
+
+  it('rejects recipients outside the two explicit production addresses', async () => {
+    const queueSend = vi.fn();
+    const message = inboundMessage('not-dean@xmtp.mx');
+
+    await expect(handleInboundEmail(message, makeEnv(queueSend))).resolves.toBeUndefined();
+
+    expect(message.setReject).toHaveBeenCalledWith('Recipient is not configured for this relay');
+    expect(db.insertInboundEmail).not.toHaveBeenCalled();
+    expect(queueSend).not.toHaveBeenCalled();
+  });
 });
 
 function makeEnv(queueSend: ReturnType<typeof vi.fn>): RelayEnv {
   return {
-    INBOUND_EMAIL_TO: 'deanpierce.eth@xmtp.mx',
+    INBOUND_EMAIL_TO: 'deanpierce.eth@xmtp.mx,deanpierce@xmtp.mx',
     MAX_INBOUND_EMAIL_BYTES: String(5 * 1024 * 1024),
     MAX_RELAY_BODY_BYTES: String(256 * 1024),
     XMTP_DELIVERY_QUEUE: { send: queueSend },
   } as unknown as RelayEnv;
 }
 
-function inboundMessage(): ForwardableEmailMessage & { setReject: ReturnType<typeof vi.fn> } {
+function inboundMessage(
+  to = 'deanpierce.eth@xmtp.mx',
+): ForwardableEmailMessage & { setReject: ReturnType<typeof vi.fn> } {
   const raw = new TextEncoder().encode(
-    'From: sender@example.com\r\nTo: deanpierce.eth@xmtp.mx\r\nSubject: hello\r\n\r\nbody',
+    `From: sender@example.com\r\nTo: ${to}\r\nSubject: hello\r\n\r\nbody`,
   );
   const setReject = vi.fn();
   return {
     from: 'sender@example.com',
-    to: 'deanpierce.eth@xmtp.mx',
+    to,
     rawSize: raw.byteLength,
     raw: new ReadableStream<Uint8Array>({
       start(controller) {
@@ -121,7 +148,7 @@ function inboundMessage(): ForwardableEmailMessage & { setReject: ReturnType<typ
     }),
     headers: new Headers({
       from: 'sender@example.com',
-      to: 'deanpierce.eth@xmtp.mx',
+      to,
       subject: 'hello',
       'message-id': '<message@example.com>',
     }),

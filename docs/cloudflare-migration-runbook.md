@@ -294,7 +294,7 @@ Requirements:
 ### Non-secret variables
 
 ~~~text
-INBOUND_EMAIL_TO=deanpierce.eth@xmtp.mx
+INBOUND_EMAIL_TO=deanpierce.eth@xmtp.mx,deanpierce@xmtp.mx
 EMAIL_FROM=Dean (XMTP) <deanpierce.eth@xmtp.mx>
 XMTP_ALLOWED_SENDERS=<comma-separated inbox IDs used only to seed D1>
 XMTP_ENV=production
@@ -862,7 +862,7 @@ The <code>email()</code> handler must:
 
 Email Routing accepts messages larger than D1 row and Queue message limits. Keep the application limit explicit. If raw MIME or attachments are later supported, put raw content in R2 and queue an object pointer; do not put a 25 MiB email in D1 or a Queue message.
 
-Configure an exact test alias before a catch-all. Route <code>deanpierce.eth@xmtp.mx</code> only after the Worker, D1, Queue, Container, and dedupe tests pass.
+Keep catch-all disabled. Route the two explicit addresses <code>deanpierce.eth@xmtp.mx</code> and <code>deanpierce@xmtp.mx</code> to the Worker; its comma-separated <code>INBOUND_EMAIL_TO</code> allowlist must match. Both addresses use the same configured <code>XMTP_DEAN_ADDRESS</code> destination.
 
 ## DNS and nameserver migration
 

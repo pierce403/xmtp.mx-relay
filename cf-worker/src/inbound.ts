@@ -13,8 +13,8 @@ import { envInteger, errorMessage, isWatchdogActivationState, structuredLog } fr
 
 export async function handleInboundEmail(message: ForwardableEmailMessage, env: RelayEnv): Promise<void> {
   let durableInboundId: number | null = null;
-  const configuredRecipient = env.INBOUND_EMAIL_TO.trim().toLowerCase();
-  if (!configuredRecipient || message.to.trim().toLowerCase() !== configuredRecipient) {
+  const configuredRecipients = parseConfiguredInboundRecipients(env.INBOUND_EMAIL_TO);
+  if (!configuredRecipients.has(message.to.trim().toLowerCase())) {
     structuredLog('warn', 'email.inbound.unexpected_recipient', { to: message.to });
     message.setReject('Recipient is not configured for this relay');
     return;
@@ -151,6 +151,14 @@ export async function handleInboundEmail(message: ForwardableEmailMessage, env: 
     // unacknowledged and let Cloudflare retry it.
     throw error;
   }
+}
+
+export function parseConfiguredInboundRecipients(value: string): ReadonlySet<string> {
+  const recipients = value.split(',').map((entry) => entry.trim().toLowerCase());
+  if (!recipients.length || recipients.some((entry) => !entry || !isEmailAddress(entry))) {
+    throw new Error('INBOUND_EMAIL_TO must contain only comma-separated email addresses');
+  }
+  return new Set(recipients);
 }
 
 function normalizeMessageId(value: string | null | undefined): string | null {
