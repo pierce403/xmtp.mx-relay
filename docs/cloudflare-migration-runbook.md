@@ -239,7 +239,7 @@ npm test
 npx wrangler deploy --dry-run --config wrangler.toml
 ~~~
 
-A dry run does not validate Cloudflare authentication, account entitlement, deployed bindings, DNS, Email Service, or the Container runtime. Stop here until the secrets/configuration, stopped-Railway export, D1 import, and pre-deploy watchdog pause are complete. The runtime fails closed when <code>watchdog_pause</code> is missing or invalid: Cron does not sweep/start, XMTP delivery retries without contacting the Container, and status reports <code>watchdogConfigured=false</code>/<code>watchdogPaused=null</code>. Still seed an explicit paused state before deployment so operator intent is durable and auditable. Only the authenticated start control writes explicit <code>paused:false</code> and activates the listener; Railway must already be stopped and independently verified.
+A dry run does not validate Cloudflare authentication, account entitlement, deployed bindings, DNS, Email Service, or the Container runtime. A paused Edge deployment may receive SMTP before the XMTP identity handoff only after the D1 schema and explicit <code>watchdog_pause</code> are verified. While paused or unconfigured, inbound source rows and delivery jobs are durable in D1 but remain <code>received</code>; they are not published to Queue until explicit activation, so the retry budget is not spent against a stopped Container. The runtime otherwise fails closed: Cron does not sweep/start, and status reports the configured pause. Only the authenticated start control writes explicit <code>paused:false</code> and activates the listener; the existing-production snapshot, pinned identity, and no-dual-listener gates remain mandatory before that action.
 
 The first controlled upload/deployment commands are in “Existing-production snapshot and R2 seed.” Wrangler then prints the account-specific Workers.dev URL. Record it, require <code>/healthz</code> to return 200, and use exactly that URL for <code>SMOKE_EDGE_URL</code>. Record the Worker version, Container image digest, D1 migration, Queue consumer settings, and R2 bucket in the private change record. This workspace has no authenticated Cloudflare session, so no command in this runbook has uploaded production resources.
 
@@ -249,7 +249,6 @@ The checked-in <code>.github/workflows/cloudflare-relay.yml</code> separates cod
 
 ~~~text
 CLOUDFLARE_RELAY_RESOURCES_PROVISIONED=true
-CLOUDFLARE_RELAY_SOURCE_EXPORT_READY=true
 CLOUDFLARE_RELAY_PAUSED_DEPLOY_APPROVED=true
 ~~~
 

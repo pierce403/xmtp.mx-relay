@@ -4,6 +4,7 @@ import type { RelayEnv } from '../src/bindings';
 const postal = vi.hoisted(() => ({ parse: vi.fn() }));
 const db = vi.hoisted(() => ({
   createInboundDeliveryJob: vi.fn(),
+  getRelayState: vi.fn(),
   insertInboundEmail: vi.fn(),
   markDeliveryQueued: vi.fn(),
   resolveThreadId: vi.fn(),
@@ -36,6 +37,11 @@ describe('inbound durable handoff boundary', () => {
     });
     db.markDeliveryQueued.mockResolvedValue(undefined);
     db.setRelayState.mockResolvedValue(undefined);
+    db.getRelayState.mockResolvedValue({
+      paused: false,
+      at: '2026-08-27T00:00:00.000Z',
+      reason: 'operator_start',
+    });
   });
 
   it('acknowledges SMTP after the source row commits when Queue handoff is unavailable', async () => {
@@ -58,6 +64,34 @@ describe('inbound durable handoff boundary', () => {
 
     await expect(handleInboundEmail(inboundMessage(), makeEnv(vi.fn())))
       .rejects.toThrow('D1 unavailable');
+  });
+
+  it('holds durable inbound work without spending Queue retries while XMTP is paused', async () => {
+    db.getRelayState.mockResolvedValue({
+      paused: true,
+      at: '2026-08-27T00:00:00.000Z',
+      reason: 'pre_mx_deploy',
+    });
+    const queueSend = vi.fn();
+    const message = inboundMessage();
+
+    await expect(handleInboundEmail(message, makeEnv(queueSend))).resolves.toBeUndefined();
+
+    expect(db.insertInboundEmail).toHaveBeenCalledOnce();
+    expect(db.createInboundDeliveryJob).toHaveBeenCalledOnce();
+    expect(queueSend).not.toHaveBeenCalled();
+    expect(db.markDeliveryQueued).not.toHaveBeenCalled();
+    expect(message.setReject).not.toHaveBeenCalled();
+  });
+
+  it('holds durable inbound work when the activation record is missing or invalid', async () => {
+    db.getRelayState.mockResolvedValue(null);
+    const queueSend = vi.fn();
+
+    await expect(handleInboundEmail(inboundMessage(), makeEnv(queueSend))).resolves.toBeUndefined();
+
+    expect(queueSend).not.toHaveBeenCalled();
+    expect(db.markDeliveryQueued).not.toHaveBeenCalled();
   });
 });
 

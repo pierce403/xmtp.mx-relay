@@ -190,15 +190,15 @@ The edge forwards that request only over the private Container interface. The re
 
 In the Cloudflare dashboard:
 
-1. Verify `xmtp.mx` and the controlled sender `deanpierce.eth@xmtp.mx` for Email Service.
+1. Onboard `xmtp.mx` and the controlled sender `deanpierce.eth@xmtp.mx` for Cloudflare Email Service.
 2. Confirm the native `EMAIL` binding can send only from that address.
-3. Configure Email Routing for `deanpierce.eth@xmtp.mx` to invoke this Worker, but leave the existing Mailgun MX records active until outbound and Container recovery tests pass.
-4. During cutover, apply Cloudflare's displayed MX and SPF records, enable Email Routing, and remove conflicting Mailgun MX records.
-5. Publish the Email Service DKIM records and the chosen DMARC policy. Verify MX, SPF, DKIM, and DMARC with independent DNS and real-message header checks.
+3. Seed and verify the durable watchdog pause, then deploy the Worker without starting the Container.
+4. Configure one literal Email Routing rule for `deanpierce.eth@xmtp.mx` to invoke `xmtp-mx-relay-edge` and enable Cloudflare's apex MX records.
+5. Verify MX, SPF, DKIM, and DMARC with independent DNS plus a real SMTP message and D1 read-back.
 
 The Worker forces `EMAIL_FROM`; an XMTP request cannot select an arbitrary From address. It preserves `to`, `cc`, `bcc`, `subject`, `text`, `html`, and `replyTo`. `email.send.result.v1.providerMessageId` contains the native Cloudflare Email Service `messageId`.
 
-Inbound raw MIME is size-checked, parsed, normalized, and committed to D1 before the handler returns. Attachments are not relayed. The dedupe key hashes the canonical SMTP envelope plus exact raw MIME; sender-controlled Message-ID is retained as metadata/thread context but is not trusted as the uniqueness boundary. The Queue receives only a D1 job ID, and replay repairs a D1-commit/Queue-send gap without creating another `email.inbound.v1` message.
+Inbound raw MIME is size-checked, parsed, normalized, and committed to D1 before the handler returns. Attachments are not relayed. The dedupe key hashes the canonical SMTP envelope plus exact raw MIME; sender-controlled Message-ID is retained as metadata/thread context but is not trusted as the uniqueness boundary. While the watchdog is paused or unconfigured, the durable delivery job remains `received` and no Queue retry budget is spent. After explicit activation, the watchdog publishes held jobs. The Queue receives only a D1 job ID, and replay repairs a D1-commit/Queue-send gap without creating another `email.inbound.v1` message.
 
 ## XMTP snapshot migration and bootstrap safety
 

@@ -110,6 +110,7 @@ Legacy Railway rollback:
 - 2026-08-27: Cloudflare Email Service and XMTP can produce accepted-but-unrecorded ambiguity. Record `uncertain` for manual reconciliation instead of retrying and risking duplicates.
 - 2026-08-27: `cf-worker/wrangler.toml` is relative to `cf-worker/`; the Container image path is `../container/Dockerfile`.
 - 2026-08-27: Production Cloudflare resources were provisioned with D1 ID `2a73f259-c5db-4411-ba74-38ce9f72f652`, R2 bucket `xmtp-mx-xmtp-state-production`, and the four checked-in production Queue/DLQ names. Email Sending onboarding can safely precede inbound MX routing; do not enable Email Routing until the paused Worker and exact Worker routing rule are verified.
+- 2026-08-27: Cloudflare SMTP ingest may run before the XMTP identity handoff only while `watchdog_pause` is durably true. `cf-worker/src/inbound.ts` must leave new delivery jobs in `received` instead of publishing Queue work while paused; the watchdog publishes those held jobs after explicit activation.
 
 ## Agent Tips
 

@@ -114,7 +114,6 @@ jobs:
       SMOKE_ADMIN_TOKEN: ${{ secrets.SMOKE_ADMIN_TOKEN }}
       SMOKE_EDGE_URL: ${{ vars.SMOKE_EDGE_URL }}
       RESOURCES_PROVISIONED: ${{ vars.CLOUDFLARE_RELAY_RESOURCES_PROVISIONED }}
-      SOURCE_EXPORT_READY: ${{ vars.CLOUDFLARE_RELAY_SOURCE_EXPORT_READY }}
       PAUSED_DEPLOY_APPROVED: ${{ vars.CLOUDFLARE_RELAY_PAUSED_DEPLOY_APPROVED }}
       WRANGLER_SEND_METRICS: 'false'
 
@@ -146,10 +145,6 @@ jobs:
           fi
           if [ "$RESOURCES_PROVISIONED" != 'true' ]; then
             echo 'Cloudflare resources have not been recorded as provisioned.' >&2
-            exit 1
-          fi
-          if [ "$SOURCE_EXPORT_READY" != 'true' ]; then
-            echo 'The stopped legacy XMTP database export has not passed local verification.' >&2
             exit 1
           fi
           if [ "$PAUSED_DEPLOY_APPROVED" != 'true' ]; then

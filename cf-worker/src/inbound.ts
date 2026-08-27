@@ -2,13 +2,14 @@ import PostalMime from 'postal-mime';
 import type { RelayEnv } from './bindings';
 import {
   createInboundDeliveryJob,
+  getRelayState,
   insertInboundEmail,
   markDeliveryQueued,
   resolveThreadId,
   setRelayState,
 } from './db';
 import { isEmailAddress, utf8Length, type EmailInboundV1 } from './protocol';
-import { envInteger, errorMessage, structuredLog } from './runtime';
+import { envInteger, errorMessage, isWatchdogActivationState, structuredLog } from './runtime';
 
 export async function handleInboundEmail(message: ForwardableEmailMessage, env: RelayEnv): Promise<void> {
   let durableInboundId: number | null = null;
@@ -111,8 +112,19 @@ export async function handleInboundEmail(message: ForwardableEmailMessage, env: 
 
     const job = await createInboundDeliveryJob(env, inserted.row);
     if (job.status === 'received') {
-      await env.XMTP_DELIVERY_QUEUE.send({ version: 1, kind: 'xmtp_delivery', jobId: job.job_id });
-      await markDeliveryQueued(env, job.job_id);
+      const activation = await getRelayState<unknown>(env, 'watchdog_pause');
+      if (isWatchdogActivationState(activation) && activation.paused === false) {
+        await env.XMTP_DELIVERY_QUEUE.send({ version: 1, kind: 'xmtp_delivery', jobId: job.job_id });
+        await markDeliveryQueued(env, job.job_id);
+      } else {
+        // SMTP ingest can safely precede the XMTP identity handoff. Keep the
+        // durable job in `received`; the active watchdog's stranded-work scan
+        // publishes it only after an operator explicitly clears the pause.
+        structuredLog('info', 'email.inbound.held_for_activation', {
+          inboundId: inserted.row.id,
+          watchdogConfigured: isWatchdogActivationState(activation),
+        });
+      }
     }
     await setRelayState(env, 'last_inbound_email_received', {
       inboundId: inserted.row.id,
