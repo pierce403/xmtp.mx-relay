@@ -121,3 +121,4 @@ Legacy Railway rollback:
 - Keep diffs small and focused; avoid unrelated refactors.
 - Keep docs concise and concrete; use exact commands and file paths.
 - No emojis; prefer short, actionable bullets.
+- Do not route new traffic through or configure Railway/Mailgun; they are legacy rollback only. New delivery work must use Cloudflare Email Routing and native Cloudflare Email Service.

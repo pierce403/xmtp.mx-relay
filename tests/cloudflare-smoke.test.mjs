@@ -78,8 +78,8 @@ describe('wire fixtures', () => {
 
   it('recognizes only email.send.result.v1 JSON results', () => {
     assert.deepEqual(
-      parseEmailSendResult('{"type":"email.send.result.v1","ok":true,"mailgunId":"abc","error":null}'),
-      { type: 'email.send.result.v1', ok: true, mailgunId: 'abc', error: null },
+      parseEmailSendResult('{"type":"email.send.result.v1","ok":true,"providerMessageId":"abc","error":null}'),
+      { type: 'email.send.result.v1', ok: true, providerMessageId: 'abc', error: null },
     );
     assert.equal(parseEmailSendResult('{"type":"email.send.v1","ok":true}'), null);
     assert.equal(parseEmailSendResult('not json'), null);

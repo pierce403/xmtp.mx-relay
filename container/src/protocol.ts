@@ -20,7 +20,7 @@ export const emailSendResultV1Schema = z
   .object({
     type: z.literal('email.send.result.v1'),
     ok: z.boolean(),
-    mailgunId: boundedText(4_096).nullable(),
+    providerMessageId: boundedText(4_096).nullable(),
     error: boundedText(16_384).nullable(),
   })
   .strict();

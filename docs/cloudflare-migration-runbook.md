@@ -843,7 +843,7 @@ allowed_sender_addresses = ["deanpierce.eth@xmtp.mx"]
 
 The Worker must preserve <code>to</code>, <code>cc</code>, <code>bcc</code>, <code>subject</code>, <code>text</code>, <code>html</code>, and <code>replyTo</code>, while forcing <code>from</code> to <code>EMAIL_FROM</code>.
 
-The v1 result field remains named <code>mailgunId</code> for wire compatibility. With Cloudflare it contains the Cloudflare provider message ID.
+The result uses the provider-neutral <code>providerMessageId</code> field and contains the native Cloudflare Email Service message ID.
 
 Test first to an account-verified destination, then to an arbitrary controlled destination. A successful binding call means Cloudflare accepted the message; use Email Service logs/events and the destination mailbox to prove final delivery.
 

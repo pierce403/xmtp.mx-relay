@@ -275,7 +275,7 @@ async function handleXmtpMessage(message: DecodedMessage<any>, replay = false): 
       JSON.stringify({
         type: 'email.send.result.v1',
         ok: false,
-        mailgunId: null,
+        providerMessageId: null,
         error: 'payload_too_large',
       }),
     );
@@ -312,7 +312,7 @@ async function handleXmtpMessage(message: DecodedMessage<any>, replay = false): 
       JSON.stringify({
         type: 'email.send.result.v1',
         ok: false,
-        mailgunId: null,
+        providerMessageId: null,
         error: 'payload_too_large',
       }),
     );

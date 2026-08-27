@@ -324,7 +324,7 @@ describe('Queue delivery safety', () => {
       expect.objectContaining({
         type: 'email.send.result.v1',
         ok: true,
-        mailgunId: 'provider-won-race',
+        providerMessageId: 'provider-won-race',
       }),
     );
     expect(ack).toHaveBeenCalledOnce();

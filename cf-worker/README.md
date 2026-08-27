@@ -196,7 +196,7 @@ In the Cloudflare dashboard:
 4. During cutover, apply Cloudflare's displayed MX and SPF records, enable Email Routing, and remove conflicting Mailgun MX records.
 5. Publish the Email Service DKIM records and the chosen DMARC policy. Verify MX, SPF, DKIM, and DMARC with independent DNS and real-message header checks.
 
-The Worker forces `EMAIL_FROM`; an XMTP request cannot select an arbitrary From address. It preserves `to`, `cc`, `bcc`, `subject`, `text`, `html`, and `replyTo`. `email.send.result.v1.mailgunId` remains the v1 provider-ID field for compatibility and contains the Cloudflare Email Service `messageId`.
+The Worker forces `EMAIL_FROM`; an XMTP request cannot select an arbitrary From address. It preserves `to`, `cc`, `bcc`, `subject`, `text`, `html`, and `replyTo`. `email.send.result.v1.providerMessageId` contains the native Cloudflare Email Service `messageId`.
 
 Inbound raw MIME is size-checked, parsed, normalized, and committed to D1 before the handler returns. Attachments are not relayed. The dedupe key hashes the canonical SMTP envelope plus exact raw MIME; sender-controlled Message-ID is retained as metadata/thread context but is not trusted as the uniqueness boundary. The Queue receives only a D1 job ID, and replay repairs a D1-commit/Queue-send gap without creating another `email.inbound.v1` message.
 

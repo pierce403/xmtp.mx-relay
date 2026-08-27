@@ -53,10 +53,10 @@ Privileged relay and lifecycle endpoints require bearer authentication. The Cont
 Relay replies with:
 
 ```json
-{ "type": "email.send.result.v1", "ok": true, "mailgunId": "…", "error": null }
+{ "type": "email.send.result.v1", "ok": true, "providerMessageId": "…", "error": null }
 ```
 
-`mailgunId` remains the v1 field name for compatibility; after cutover it carries the Cloudflare provider message ID. An `error` of `delivery_state_unknown` is an ambiguous accepted-but-unrecorded outcome and must be manually reconciled, not blindly retried.
+`providerMessageId` carries the native Cloudflare Email Service message ID. An `error` of `delivery_state_unknown` is an ambiguous accepted-but-unrecorded outcome and must be manually reconciled, not blindly retried.
 
 ## Validate locally
 

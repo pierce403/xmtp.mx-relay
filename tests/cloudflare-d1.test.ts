@@ -187,7 +187,7 @@ describe('outbound XMTP idempotency and authorization state (B/C/E)', () => {
     expect(JSON.parse(firstJob.payload_json)).toEqual({
       type: 'email.send.result.v1',
       ok: true,
-      mailgunId: 'cloudflare-provider-id',
+      providerMessageId: 'cloudflare-provider-id',
       error: null,
     });
     expect(await env.RELAY_DB.prepare('SELECT COUNT(*) AS count FROM outbound_request').first()).toEqual({ count: 1 });

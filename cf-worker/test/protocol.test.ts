@@ -71,11 +71,11 @@ describe('wire protocol validation', () => {
       .toBe('a'.repeat(64));
   });
 
-  it('retains mailgunId as the v1 provider result field', () => {
+  it('returns Cloudflare provider IDs through a provider-neutral field', () => {
     expect(makeEmailSendResult({ ok: true, providerMessageId: 'cloudflare-message-id' })).toEqual({
       type: 'email.send.result.v1',
       ok: true,
-      mailgunId: 'cloudflare-message-id',
+      providerMessageId: 'cloudflare-message-id',
       error: null,
     });
   });

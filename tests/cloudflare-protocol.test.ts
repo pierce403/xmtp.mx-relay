@@ -91,12 +91,12 @@ describe('Worker/Container event contract', () => {
   });
 });
 
-describe('email.send.result.v1 compatibility', () => {
-  it('retains mailgunId as the provider-neutral v1 compatibility field', () => {
+describe('email.send.result.v1', () => {
+  it('returns Cloudflare provider IDs through a provider-neutral field', () => {
     expect(makeEmailSendResult({ ok: true, providerMessageId: 'cloudflare-message-id' })).toEqual({
       type: 'email.send.result.v1',
       ok: true,
-      mailgunId: 'cloudflare-message-id',
+      providerMessageId: 'cloudflare-message-id',
       error: null,
     });
   });

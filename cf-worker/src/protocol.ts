@@ -36,11 +36,11 @@ export type EmailInboundV1 = {
   receivedAt: string;
 };
 
-/** `mailgunId` is intentionally retained as the v1 provider-id field. */
+/** Provider-neutral ID returned by Cloudflare Email Service. */
 export type EmailSendResultV1 = {
   type: typeof EMAIL_SEND_RESULT_V1;
   ok: boolean;
-  mailgunId: string | null;
+  providerMessageId: string | null;
   error: string | null;
 };
 
@@ -161,7 +161,7 @@ export function makeEmailSendResult(input: {
   return {
     type: EMAIL_SEND_RESULT_V1,
     ok: input.ok,
-    mailgunId: input.providerMessageId ?? null,
+    providerMessageId: input.providerMessageId ?? null,
     error: input.error ?? null,
   };
 }
