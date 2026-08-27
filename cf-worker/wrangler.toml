@@ -41,11 +41,10 @@ RECOVERY_IMPORT_ENABLED = "false"
 XMTP_ALLOW_NEW_INSTALLATION = "false"
 LOG_LEVEL = "info"
 
-# Replace this after `wrangler d1 create xmtp-mx-relay-production`.
 [[d1_databases]]
 binding = "RELAY_DB"
 database_name = "xmtp-mx-relay-production"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "2a73f259-c5db-4411-ba74-38ce9f72f652"
 migrations_dir = "migrations"
 
 [[r2_buckets]]
