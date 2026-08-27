@@ -1,13 +1,15 @@
 # Cloudflare provisioning receipt — 2026-08-27
 
-This receipt records the non-secret production resources created before the
-XMTP identity handoff. It is not an activation or DNS cutover receipt.
+This receipt records the non-secret production resources and paused SMTP
+ingest deployed before the XMTP identity handoff. It is not an XMTP listener
+activation receipt.
 
 ## Source and validation
 
-- Relay source: `e527470d1a104abf1ba5795d5e809e15a2540cef` on `main`
-- GitHub validation: run `33078263656`, successful
-- Cloudflare Worker unit tests: 33 passed
+- Relay source: `ce408497ce8c0d62d4fcea724b11d5fd0d07132f` on `main`
+- GitHub validation: run `33084377610`, successful
+- Cloudflare Worker tests: 73 passed
+- Cross-layer Worker tests: 33 passed
 - Cloudflare smoke harness: 14 passed
 - Container tests: 45 passed
 - Worker/Container `wrangler deploy --dry-run`: passed
@@ -22,10 +24,19 @@ XMTP identity handoff. It is not an activation or DNS cutover receipt.
 - Queue: `xmtp-mx-xmtp-delivery-production`
 - DLQ: `xmtp-mx-xmtp-delivery-dlq-production`
 - Email Sending domain: `xmtp.mx`, enabled
+- Edge Worker: `xmtp-mx-relay-edge`
+  (`https://xmtp-mx-relay-edge.bcrt43.workers.dev`)
+- First deployed code version: `e5f5c44e-fb33-4a1d-817f-13e1befbacfc`
+- Current version after secret updates: `6c043d2b-4773-4cf7-83c5-303c7715e574`
+- Container application: `a0363b9f-d19a-45cd-ab81-1ded7a59399e`
+- Container image: `sha256:4c0dece9178ce169027f1a7ef2279eef700e4367c2cb0f1b5d99472144d30acf`
 
 D1 migration `0001_cloudflare_relay.sql` was applied. The durable
-`watchdog_pause` record was verified with `paused: true` and reason
-`pre_mx_deploy` at `2026-08-27T13:43:15.361Z`.
+`watchdog_pause` record was verified with `paused: true`; the authenticated
+stop path refreshed it with reason `operator_stop` at
+`2026-08-27T14:52:56.350Z`. Cron subsequently recorded a healthy paused
+watchdog. The only Container instance is `inactive` and has never had the XMTP
+bot or expected-installation secrets needed to start a listener.
 
 ## DNS state
 
@@ -35,25 +46,32 @@ Cloudflare is authoritative through `cash.ns.cloudflare.com` and
 Cloudflare Email Sending automatically installed and public DNS resolved the
 three `cf-bounce.xmtp.mx` MX records plus bounce SPF, DKIM, and apex DMARC.
 
-Inbound Email Routing remains deliberately disabled:
+Inbound Email Routing is enabled:
 
-- no custom Email Routing rules;
+- apex MX points at Cloudflare's three `route*.mx.cloudflare.net` hosts;
+- apex SPF and `cf2024-1._domainkey` DKIM exist on the authoritative nameserver;
+- rule `56de1718b0074d839246aea6add9eb21` matches only
+  `deanpierce.eth@xmtp.mx` and invokes `xmtp-mx-relay-edge`;
 - catch-all disabled with drop action;
-- no apex `xmtp.mx` MX records;
-- no apex Email Routing SPF or `cf2024-1._domainkey` record.
+- Worker `/healthz` returns HTTP 200.
 
-Do not enable the apex MX records until a paused Worker is deployed, its exact
-Email Routing rule targets `xmtp-mx-relay-edge`, the restored XMTP identity is
-verified, and the listener handoff gates pass.
+While the watchdog is paused or unconfigured, the Worker commits accepted SMTP
+mail and its delivery job to D1 with status `received` without publishing to
+Queue. Explicit XMTP activation causes the watchdog to publish held jobs.
+
+An authenticated external DATA acceptance and matching D1 row are still
+required for the live SMTP receipt. Cloudflare accepted the address at RCPT;
+unauthenticated direct DATA probes were correctly rejected by SPF/DMARC, and a
+same-domain Email Sending message is not an independent routing test.
 
 ## Deployment gates
 
 GitHub environment `cloudflare-relay-production` is restricted to `main` and
 requires owner review. `CLOUDFLARE_RELAY_RESOURCES_PROVISIONED=true`; the source
-export, paused-deploy approval, R2 snapshot, legacy-listener-stopped, and
-activation-approval gates are explicitly `false`.
+export, R2 snapshot, legacy-listener-stopped, and activation-approval gates are
+explicitly `false`. The user-approved paused-deploy gate is `true`, and the
+verified Worker URL is recorded.
 
-The `xmtp-mx-relay-edge` Worker is not deployed. Cloudflare returned code
-`10007` when its deployments were queried. The existing-production source
-snapshot and expected installation identity remain required before the
-checked-in `deploy-paused` workflow may run.
+The existing-production source snapshot and expected installation identity
+remain required before the XMTP Container may be activated. No new XMTP
+installation is authorized by this receipt.
