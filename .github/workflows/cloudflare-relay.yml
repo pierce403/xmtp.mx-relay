@@ -1,0 +1,301 @@
+name: Validate and deploy Cloudflare relay
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/cloudflare-relay.yml'
+      - 'cf-worker/**'
+      - 'container/**'
+      - 'docs/cloudflare-migration-runbook.md'
+      - 'scripts/cloudflare-smoke*.mjs'
+      - 'tests/**'
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'Dockerfile'
+  pull_request:
+    paths:
+      - '.github/workflows/cloudflare-relay.yml'
+      - 'cf-worker/**'
+      - 'container/**'
+      - 'scripts/cloudflare-smoke*.mjs'
+      - 'tests/**'
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Validate, deploy paused, or activate after Railway stops
+        required: true
+        default: validate
+        type: choice
+        options:
+          - validate
+          - deploy-paused
+          - activate-pre-mx
+      confirm:
+        description: Type xmtp-mx-relay-production for a deployment
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: 'true'
+      WRANGLER_SEND_METRICS: 'false'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            cf-worker/package-lock.json
+            container/package-lock.json
+
+      - name: Install legacy relay dependencies
+        run: npm ci
+
+      - name: Install Cloudflare Worker dependencies
+        run: npm ci --prefix cf-worker
+
+      - name: Install XMTP Container dependencies
+        run: npm ci --prefix container
+
+      - name: Validate legacy rollback relay
+        run: |
+          npm run typecheck
+          npm run build
+
+      - name: Validate Cloudflare Worker
+        run: |
+          npm run typecheck:cloudflare
+          npm --prefix cf-worker test
+          npm run test:cloudflare
+
+      - name: Validate XMTP Container
+        run: |
+          npm run typecheck:container
+          npm run build:container
+          npm run test:container
+          npm --prefix container run recovery:drill
+
+      - name: Build Container image
+        run: docker build --file container/Dockerfile container
+
+      - name: Validate Wrangler bundle
+        run: npm run cf:dry-run
+
+  deploy_paused:
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'deploy-paused' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: cloudflare-relay-production
+    concurrency:
+      group: cloudflare-relay-production
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      SMOKE_ADMIN_TOKEN: ${{ secrets.SMOKE_ADMIN_TOKEN }}
+      SMOKE_EDGE_URL: ${{ vars.SMOKE_EDGE_URL }}
+      RESOURCES_PROVISIONED: ${{ vars.CLOUDFLARE_RELAY_RESOURCES_PROVISIONED }}
+      SOURCE_EXPORT_READY: ${{ vars.CLOUDFLARE_RELAY_SOURCE_EXPORT_READY }}
+      PAUSED_DEPLOY_APPROVED: ${{ vars.CLOUDFLARE_RELAY_PAUSED_DEPLOY_APPROVED }}
+      WRANGLER_SEND_METRICS: 'false'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            cf-worker/package-lock.json
+            container/package-lock.json
+
+      - name: Install deployment dependencies
+        run: |
+          npm ci --prefix cf-worker
+          npm ci --prefix container
+
+      - name: Enforce production migration gates
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != 'xmtp-mx-relay-production' ]; then
+            echo 'Exact production Container confirmation is required.' >&2
+            exit 1
+          fi
+          if [ "$RESOURCES_PROVISIONED" != 'true' ]; then
+            echo 'Cloudflare resources have not been recorded as provisioned.' >&2
+            exit 1
+          fi
+          if [ "$SOURCE_EXPORT_READY" != 'true' ]; then
+            echo 'The stopped legacy XMTP database export has not passed local verification.' >&2
+            exit 1
+          fi
+          if [ "$PAUSED_DEPLOY_APPROVED" != 'true' ]; then
+            echo 'The protected paused-deployment gate is not approved.' >&2
+            exit 1
+          fi
+          if rg -q 'REPLACE_WITH_' cf-worker/wrangler.toml; then
+            echo 'Wrangler still contains a placeholder resource ID.' >&2
+            exit 1
+          fi
+          if [ -z "$SMOKE_EDGE_URL" ] || [ -z "$SMOKE_ADMIN_TOKEN" ]; then
+            echo 'SMOKE_EDGE_URL and SMOKE_ADMIN_TOKEN are required.' >&2
+            exit 1
+          fi
+
+      - name: Apply D1 migrations
+        run: npx --prefix cf-worker wrangler d1 migrations apply RELAY_DB --remote --config cf-worker/wrangler.toml
+
+      - name: Durably pause the Container watchdog
+        run: npx --prefix cf-worker wrangler d1 execute RELAY_DB --remote --file cf-worker/scripts/pause-watchdog.sql --config cf-worker/wrangler.toml
+
+      - name: Deploy Worker with the Container still paused and MX unchanged
+        run: npx --prefix cf-worker wrangler deploy --config cf-worker/wrangler.toml
+
+      - name: Inspect deployment
+        run: npx --prefix cf-worker wrangler deployments status --config cf-worker/wrangler.toml
+
+      - name: Verify edge health without starting the Container
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+
+          const edge = process.env.SMOKE_EDGE_URL.replace(/\/$/, '');
+          const health = await fetch(edge + '/healthz');
+          assert.equal(health.status, 200);
+          assert.equal((await health.json())?.ok, true);
+          const status = await fetch(edge + '/internal/v1/status', {
+            headers: { authorization: 'Bearer ' + process.env.SMOKE_ADMIN_TOKEN },
+          });
+          const body = await status.json();
+          assert.equal(status.status, 200, JSON.stringify(body));
+          assert.equal(body?.container?.watchdogPaused, true);
+          assert.ok(!['healthy', 'running'].includes(body?.container?.state?.status));
+          console.log('Verified edge health and the durable pre-handoff watchdog pause.');
+          NODE
+
+  activate_pre_mx:
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'activate-pre-mx' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: cloudflare-relay-production
+    concurrency:
+      group: cloudflare-relay-production
+      cancel-in-progress: false
+    env:
+      SMOKE_ADMIN_TOKEN: ${{ secrets.SMOKE_ADMIN_TOKEN }}
+      SMOKE_EDGE_URL: ${{ vars.SMOKE_EDGE_URL }}
+      R2_SNAPSHOT_READY: ${{ vars.CLOUDFLARE_RELAY_R2_SNAPSHOT_READY }}
+      LEGACY_LISTENER_STOPPED: ${{ vars.CLOUDFLARE_RELAY_LEGACY_LISTENER_STOPPED }}
+      ACTIVATION_APPROVED: ${{ vars.CLOUDFLARE_RELAY_ACTIVATION_APPROVED }}
+
+    steps:
+      - name: Enforce single-listener handoff gates
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != 'xmtp-mx-relay-production' ]; then
+            echo 'Exact production Container confirmation is required.' >&2
+            exit 1
+          fi
+          if [ "$R2_SNAPSHOT_READY" != 'true' ]; then
+            echo 'The signed multipart R2 snapshot and D1 freshness anchor are not verified.' >&2
+            exit 1
+          fi
+          if [ "$LEGACY_LISTENER_STOPPED" != 'true' ]; then
+            echo 'Railway must be proven stopped before Cloudflare activation.' >&2
+            exit 1
+          fi
+          if [ "$ACTIVATION_APPROVED" != 'true' ]; then
+            echo 'The protected Container activation gate is not approved.' >&2
+            exit 1
+          fi
+          if [ -z "$SMOKE_EDGE_URL" ] || [ -z "$SMOKE_ADMIN_TOKEN" ]; then
+            echo 'SMOKE_EDGE_URL and SMOKE_ADMIN_TOKEN are required.' >&2
+            exit 1
+          fi
+
+      - name: Start exactly one restored Container
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+
+          const edge = process.env.SMOKE_EDGE_URL.replace(/\/$/, '');
+          const headers = {
+            authorization: 'Bearer ' + process.env.SMOKE_ADMIN_TOKEN,
+            'content-type': 'application/json',
+          };
+          const before = await fetch(edge + '/internal/v1/status', { headers });
+          const beforeBody = await before.json();
+          assert.equal(before.status, 200);
+          assert.equal(beforeBody?.container?.watchdogPaused, true, 'watchdog must be paused before handoff');
+          assert.ok(
+            !['healthy', 'running'].includes(beforeBody?.container?.state?.status),
+            'Container must not already be running',
+          );
+
+          const start = await fetch(edge + '/internal/v1/container/start', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ confirm: 'xmtp-mx-relay-production' }),
+          });
+          const startBody = await start.json();
+          assert.equal(start.status, 200, JSON.stringify(startBody));
+          NODE
+
+      - name: Verify the restored inbox and installation
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+
+          const edge = process.env.SMOKE_EDGE_URL.replace(/\/$/, '');
+          const deadline = Date.now() + 10 * 60_000;
+          let last = 'not checked';
+          while (Date.now() < deadline) {
+            try {
+              const response = await fetch(edge + '/internal/v1/status', {
+                headers: { authorization: 'Bearer ' + process.env.SMOKE_ADMIN_TOKEN },
+              });
+              const body = await response.json();
+              const relay = body?.container?.relay;
+              if (response.ok && relay?.ready === true) {
+                assert.equal(body.container.instanceName, 'xmtp-mx-relay-production');
+                assert.ok(relay.configuredExpectedInboxId);
+                assert.ok(relay.configuredExpectedInstallationId);
+                assert.equal(relay.currentInboxId, relay.configuredExpectedInboxId);
+                assert.equal(relay.pinnedInboxId, relay.configuredExpectedInboxId);
+                assert.equal(relay.installationId, relay.configuredExpectedInstallationId);
+                console.log('Verified singleton readiness with the pinned inbox and installation.');
+                process.exit(0);
+              }
+              last = JSON.stringify(body);
+            } catch (error) {
+              last = error instanceof Error ? error.message : String(error);
+            }
+            await new Promise((resolve) => setTimeout(resolve, 10_000));
+          }
+          throw new Error('Container identity readiness timed out: ' + last.slice(0, 1_000));
+          NODE

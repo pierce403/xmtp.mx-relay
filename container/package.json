@@ -1,0 +1,31 @@
+{
+  "name": "xmtp-mx-cloudflare-container",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/index.js",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "snapshot:export": "node --import tsx scripts/export-snapshot.ts",
+    "snapshot:upload": "node --import tsx scripts/upload-snapshot.ts",
+    "identity:inspect": "node --import tsx scripts/inspect-existing-identity.ts",
+    "recovery:drill": "node --import tsx scripts/recovery-drill.ts"
+  },
+  "dependencies": {
+    "@xmtp/node-sdk": "3.2.2",
+    "ethers": "5.7.2",
+    "pino": "9.9.0",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.6",
+    "tsx": "4.20.5",
+    "typescript": "5.9.2"
+  }
+}

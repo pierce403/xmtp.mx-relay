@@ -23,7 +23,14 @@ async function main(): Promise<void> {
     dataDir: config.dataDir,
   });
 
-  log.info({ inboxId: xmtp.inboxId, address: xmtp.accountIdentifier?.identifier ?? null }, 'xmtp.ready');
+  log.info(
+    {
+      inboxId: xmtp.inboxId,
+      installationId: xmtp.installationId,
+      address: xmtp.accountIdentifier?.identifier ?? null,
+    },
+    'xmtp.ready',
+  );
 
   await xmtp.conversations.sync();
 

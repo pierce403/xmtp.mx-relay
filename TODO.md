@@ -1,37 +1,48 @@
 # TODO
 
-## V1 “It Works” Checklist
+No Cloudflare production cutover or production recovery drill has occurred. Complete these gates in [docs/cloudflare-migration-runbook.md](docs/cloudflare-migration-runbook.md); do not infer completion from builds or local tests.
 
-- [ ] Configure a real Mailgun Route to `POST /webhooks/mailgun/inbound` and verify SMTP→XMTP delivery end-to-end
-- [ ] Send a real `email.send.v1` XMTP message from an allowlisted sender and verify XMTP→SMTP delivery end-to-end
-- [ ] Replay the same inbound event and confirm dedupe prevents a second XMTP send
-- [ ] Replay the same outbound XMTP message and confirm dedupe prevents a second Mailgun send
-- [ ] Invalid Mailgun signature returns 403 and does not enqueue / store
-- [ ] Non-allowlisted XMTP sender is denied (and gets `email.send.result.v1` error)
+## Provision and inspect
 
-## Production Hardening
+- [ ] Obtain authenticated Cloudflare, Railway, registrar/DNS, Mailgun rollback, production secret, and controlled mailbox/test-identity access
+- [ ] Confirm Workers Paid, Containers, Email Service arbitrary-recipient access/quota, Email Routing, D1, R2, Queues, and DLQs
+- [ ] Replace the D1 placeholder ID, apply migrations, and verify tables/bindings/Queue consumers
+- [ ] Configure all Cloudflare Secrets, including the independent snapshot signing key; never commit values
+- [ ] Resolve the production allowlist to normalized 64-hex XMTP inbox IDs and compare the complete imported D1 list
 
-- [ ] Add `/readyz` that checks DB + XMTP client initialized
-- [ ] Add admin alerting on outbound send failures + repeated inbound send failures (optional `ADMIN_XMTP_ADDRESS`)
-- [ ] Add webhook IP allowlist option (Mailgun IPs) or shared secret path segment
-- [ ] Add per-recipient + per-sender quotas and backpressure controls
+## Preserve the production XMTP installation
 
-## Inbound SMTP Improvements
+- [ ] Deploy the additive Railway `xmtp.ready` installation-ID diagnostic and record the current inbox, installation, and network installation count
+- [ ] During a no-dual-listener maintenance window, stop Railway and run `container` identity inspection against the stopped volume
+- [ ] Export a signed multipart v2 snapshot with no live WAL/journal; upload immutable parts/pin/manifest and publish the logical `latest.json`/D1 anchor last
+- [ ] Verify every R2 object by read-back hash/size and establish the D1 monotonic snapshot anchor
+- [ ] Import stopped `relay.sqlite` into D1; compare counts, dedupe keys, outbound message IDs, allowlist members, and thread maps
+- [ ] Rehearse restart and destroyed-filesystem restoration; require the same inbox/installation and unchanged network installation count
+- [ ] Keep `XMTP_ALLOW_NEW_INSTALLATION=false`; stop the migration on any `recovery_required` condition
 
-- [ ] Store raw MIME (Mailgun `body-mime`) for future parsing
-- [ ] Attachments: store + fetch MIME, upload to object storage, include links in XMTP
-- [ ] Multi-recipient handling (To/CC lists) and normalization
-- [ ] Threading map using `Message-Id` / `In-Reply-To` / `References`
+## Staged delivery and cutover
 
-## Outbound XMTP Improvements
+- [ ] Run protected `deploy-paused` from `main`, upload/anchor the signed snapshot while the Container remains stopped, then run `activate-pre-mx` only after Railway is demonstrably stopped
+- [ ] Test native Cloudflare Email Service outbound to controlled and arbitrary controlled destinations before changing MX
+- [ ] Prove allowlisted outbound, unauthorized denial, replay suppression, result delivery, and ambiguous-state quarantine
+- [ ] Configure Email Routing and the exact Cloudflare-generated MX/SPF/DKIM records
+- [ ] Run real Internet inbound, duplicate inbound, Queue retry/DLQ, restart, and destroyed-filesystem recovery tests
+- [ ] Verify real recipient headers for aligned SPF, DKIM, and DMARC
+- [ ] Move the static frontend through staging, immutable production candidate preview, exact-version promotion, and one-time `xmtp.mx` trigger attachment
+- [ ] Record production acceptance A–J and repeat critical checks from a second network/resolver
 
-- [ ] Optional “help” reply for non-JSON / unknown message types
-- [ ] Enforce max sizes for `text/html` and recipient lists
-- [ ] Improve `replyTo` handling (force verified sender; don’t trust user `from`)
+## Rollback and removal gates
 
-## Testing / Quality
+- [ ] Rehearse watchdog pause → Cloudflare listener stop → Railway start without overlap
+- [ ] Create/test an apex Mailgun inbound rollback route or explicitly accept that inbound mail pauses during rollback
+- [ ] Preserve Railway volume, Mailgun, GitHub Pages, and Vercel until the observation window and rollback drills pass
+- [ ] Reconcile every `sending`/`uncertain` row manually before retry or removal
+- [ ] Only after all gates pass, remove Mailgun code/secrets/DNS, Railway, the obsolete cron poller, GitHub Pages, and Vercel
 
-- [ ] Add unit tests for Mailgun signature verification + normalization + dedupe keys
-- [ ] Add Mailgun API mocking tests (e.g. with `nock`) for outbound send paths
-- [ ] Address `npm audit` findings (avoid `--force` unless reviewed)
+## Product backlog
 
+- [ ] Attachments: store MIME/object data outside XMTP payloads and use expiring links
+- [ ] Complete reply threading through `Message-Id`, `In-Reply-To`, and `References`
+- [ ] Add multi-recipient/user verification, quotas, and backpressure
+- [ ] Add optional help replies for invalid/unknown XMTP payloads
+- [ ] Address reviewed dependency audit findings without forced upgrades

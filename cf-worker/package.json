@@ -1,0 +1,23 @@
+{
+  "name": "@xmtp.mx/cloudflare-relay-edge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy --config wrangler.toml",
+    "dev": "wrangler dev --test-scheduled --config wrangler.toml",
+    "d1:local": "wrangler d1 migrations apply RELAY_DB --local --config wrangler.toml",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "^0.3.7",
+    "postal-mime": "^3.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260826.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.126.0"
+  }
+}

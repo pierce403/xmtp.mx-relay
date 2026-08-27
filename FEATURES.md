@@ -1,73 +1,93 @@
 # xmtp.mx-relay - Features
 
+No Cloudflare production deployment, DNS cutover, Email Service send, or production recovery drill has been completed. “Implemented” below means checked-in code with local automated coverage; production acceptance remains open. Railway/Mailgun is retained as the rollback service.
+
 ## Features
 
 ### SMTP → XMTP Inbound Relay
-- **Stability**: in-progress
-- **Description**: Accept Mailgun inbound webhooks, verify signature, normalize, store/dedupe in SQLite, and deliver to Dean as `email.inbound.v1` JSON over XMTP.
+- **Stability**: implemented for Cloudflare; production verification pending
+- **Description**: Cloudflare Email Routing invokes `email()`, which validates the envelope and raw MIME, persists/dedupes the event in D1, and publishes an XMTP delivery job. The singleton Container delivers `email.inbound.v1` over XMTP.
 - **Properties**:
-  - Rejects invalid Mailgun signatures (HTTP 403)
-  - Ignores recipients not matching `INBOUND_EMAIL_TO`
-  - Dedupes inbound events by Mailgun `message-id` (or `Message-Id` fallback)
-  - Persists inbound emails in `inbound_email` with `xmtp_sent_at` set only after XMTP send succeeds
+  - Rejects recipients not matching `INBOUND_EMAIL_TO`
+  - Enforces raw-message and normalized payload size limits
+  - Dedupes with SHA-256 over the normalized SMTP envelope plus exact raw MIME; `Message-ID` is metadata, not the dedupe authority
+  - Persists the D1 row/job before asynchronous Queue delivery
+  - Uses D1 unique keys to suppress ordinary at-least-once Queue replays
 - **Test Criteria**:
-  - [ ] Invalid signature returns 403 and no DB insert
-  - [ ] Valid inbound email is delivered over XMTP as `email.inbound.v1`
-  - [ ] Duplicate inbound delivery does not generate a second XMTP message
+  - [x] Local Worker tests cover parsing, persistence, retry, and duplicate handling
+  - [ ] Real Internet email reaches `deanpierce.eth@xmtp.mx` exactly once over XMTP
+  - [ ] Cloudflare Email Routing and apex MX are verified in production
 
 ### XMTP → SMTP Outbound Relay
-- **Stability**: in-progress
-- **Description**: Any XMTP sender can send `email.send.v1` JSON to the bot; the relay sends a real email via Mailgun and replies with `email.send.result.v1`.
+- **Stability**: implemented for Cloudflare; production verification pending
+- **Description**: The Container streams real `email.send.v1` messages, the Worker authorizes and persists them in D1, and a Queue consumer sends through the native Cloudflare Email Service binding before returning `email.send.result.v1` over XMTP.
 - **Properties**:
-  - Outbound requests are deduped by XMTP message id
-  - Outbound emails always use `MAILGUN_FROM` (never user-provided `From`)
+  - D1 allowlist contains resolved, normalized XMTP inbox IDs; the Edge Worker does not resolve ENS names or wallet addresses
+  - Outbound requests are deduped by XMTP message ID
+  - Recipient count/shape and payload sizes are validated
+  - `From` is forced to `EMAIL_FROM`; `to`, `cc`, `bcc`, `subject`, `text`, `html`, and `replyTo` semantics are retained
+  - Accepted-but-unrecorded provider outcomes are quarantined as `uncertain`, not blindly retried
 - **Test Criteria**:
-  - [ ] Sender triggers a single Mailgun send and gets a success result
-  - [ ] Replaying the same XMTP message id does not send a second email
+  - [x] Local tests cover allowlist denial, replay suppression, Queue retry, DLQ recording, and ambiguous-send quarantine
+  - [ ] An allowlisted production sender triggers one real Cloudflare send and receives one success result
+  - [ ] An unauthorized production sender cannot cause an email send
 
-### Persistence & Idempotency (SQLite)
-- **Stability**: in-progress
-- **Description**: SQLite stores relay state and provides idempotency for both inbound and outbound flows.
+### Cloudflare-native application persistence
+- **Stability**: implemented; production import pending
+- **Description**: D1 replaces `relay.sqlite` for Cloudflare application state while Queues provide persisted asynchronous delivery.
 - **Properties**:
-  - Relay state is stored at `DATA_DIR/relay.sqlite`
-  - XMTP Node SDK stores its local DB under `DATA_DIR/` (`xmtp-<env>-<inbox-id>.db3`)
-  - Inbound dedupe and outbound dedupe prevent duplicates across restarts
+  - D1 stores inbound mail, outbound requests, allowlist members, thread maps, delivery/retry state, Queue failures, watchdog state, and the snapshot freshness anchor
+  - Short-gap recovery republishes only unconfirmed `received` handoffs; a separate 24-hour recovery path repairs safe `queued`/`retrying` pointers lost after finite DLQ retries without replaying ambiguous in-flight sends
+  - Checked-in exporter reads a stopped legacy `relay.sqlite` and emits idempotent D1 SQL
+  - Legacy `sending` rows become `uncertain`; ambiguous work is never automatically re-driven
 - **Test Criteria**:
-  - [x] `npm run typecheck` passes
-  - [x] `npm run build` succeeds
-  - [ ] Restarting the service does not resend previously sent inbound/outbound events
+  - [x] Local schema/idempotency tests pass
+  - [ ] Stopped Railway source rows and D1 destination rows/keys are reconciled before handoff
 
-### Webhook Security & Abuse Controls
-- **Stability**: in-progress
-- **Description**: Prevent open-relay abuse and webhook spoofing.
+### XMTP installation persistence and recovery
+- **Stability**: implemented; production restore drill pending
+- **Description**: The active encrypted XMTP SQLite database stays on local Container storage. A child-process quiesce produces HMAC-signed, immutable multipart snapshots in R2; D1 anchors the newest signed pointer against rollback.
 - **Properties**:
-  - Mailgun signature verification required (`MAILGUN_WEBHOOK_SIGNING_KEY`)
-  - Webhook rate limiting enabled
-  - Payload size limit enforced
+  - Restore occurs before `Client` construction on an empty filesystem
+  - Pin, inbox ID, installation ID, environment, hashes, sizes, part order, and free space are verified
+  - Normal production requires `XMTP_ALLOW_NEW_INSTALLATION=false`
+  - Runtime recovery accepts signed v2 snapshots only; a stopped legacy database must be converted by the offline exporter
+  - The SDK client/stream runs in a child process so process exit is the exclusive-writer backup boundary
 - **Test Criteria**:
-  - [ ] Invalid signature returns 403
-  - [ ] Excessive requests return 429
+  - [x] Synthetic local multipart backup/restore and corruption tests pass
+  - [ ] Restart and intentionally destroyed-filesystem drills recover the same production installation without increasing network installation count
 
-### Deployment (Railway)
-- **Stability**: in-progress
-- **Description**: Single always-on process deployable to Railway with a persistent volume.
+### Singleton listener and lifecycle
+- **Stability**: implemented; Cloudflare runtime verification pending
+- **Description**: One stable `xmtp-mx-relay-production` Container runs the real `streamAllMessages(...)` listener. A Durable Object wrapper suppresses inactivity shutdown and a one-minute Cron watchdog supervises lifecycle and durable outbox repair; Cron never polls XMTP.
 - **Properties**:
-  - Docker-based deployment supported (`Dockerfile`)
-  - Persistent volume at `/data` recommended (`DATA_DIR=/data`)
-  - Health endpoint available at `GET /healthz`
+  - `max_instances=1`, fixed instance name, Container `/livez`, `/healthz`, and `/readyz`
+  - Recovery-required holds keep `/livez` up for inspection while `/healthz` and `/readyz` fail; transient fatal lifecycle failures exit nonzero for restart
+  - Public Edge `/healthz`; detailed status and lifecycle routes require an admin bearer
+  - Watchdog pause is persisted before a planned stop, enabling a no-dual-listener Railway handoff/rollback
+  - Missing/invalid watchdog state fails closed; only authenticated activation writes explicit running intent
+  - GitHub workflow can validate automatically and perform only a guarded, manual, pre-MX deploy from `main`
 - **Test Criteria**:
-  - [ ] Container boots and serves `/healthz`
-  - [ ] Mounted volume retains `relay.sqlite` across deploys
+  - [x] Local Worker/Container lifecycle and synthetic recovery tests pass
+  - [ ] Deployed Container stays running, recovers after exit, and never overlaps the Railway listener
+
+### Legacy Railway/Mailgun rollback
+- **Stability**: retained until Cloudflare acceptance and observation gates pass
+- **Description**: The root Node service, persistent Railway volume, Mailgun webhook/sender, and `relay.sqlite` remain available for rollback. They are not the target architecture.
+- **Test Criteria**:
+  - [ ] Railway identity/installation and health are recorded immediately before handoff
+  - [ ] Rollback is rehearsed without running two production listeners
+  - [ ] Mailgun is removed only after Cloudflare inbound/outbound and rollback gates pass
 
 ### Attachments
 - **Stability**: planned
 - **Description**: Support inbound and outbound attachments via stored MIME + object storage links.
 - **Properties**:
-  - Attachments are stored outside XMTP payloads (R2/S3) with expiring links
+  - Attachments are stored outside XMTP payloads in a separate object prefix/bucket with expiring links
   - XMTP message includes metadata + links
 - **Test Criteria**:
   - [ ] Inbound email with attachments results in XMTP message containing attachment links
-  - [ ] Outbound send with attachments delivers correct attachments via Mailgun
+  - [ ] Outbound send with attachments delivers correct attachments through the canonical provider
 
 ### Reply Threading
 - **Stability**: planned
@@ -90,9 +110,9 @@
 
 ### Token Gating (Outbound)
 - **Stability**: planned
-- **Description**: Require a token/credential check before allowing outbound sends.
+- **Description**: Add a credential or token rule in addition to the mandatory XMTP inbox-ID allowlist.
 - **Properties**:
-  - Open by default; can be toggled to enforce token gating
+  - The relay is never open by default; token gating would narrow the existing allowlist
   - Denied requests return an explicit error
 - **Test Criteria**:
   - [ ] Requests without the required token are rejected

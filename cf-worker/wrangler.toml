@@ -1,22 +1,112 @@
-name = "xmtp-mx-relay"
+name = "xmtp-mx-relay-edge"
 main = "src/worker.ts"
-compatibility_date = "2025-12-17"
+compatibility_date = "2026-08-27"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
 
+# This Cron is a Container watchdog and durable outbox sweeper. It never polls
+# XMTP; the singleton Container owns streamAllMessages() continuously.
 [triggers]
-# Poll XMTP once per minute (Workers can’t keep an always-on stream running).
 crons = ["*/1 * * * *"]
 
-[vars]
-# Non-secret vars can live here.
-MAILGUN_DOMAIN = ""
-# production | dev | local
-XMTP_ENV = "production"
-# Optional: 0x… address (ENS not supported in the Worker version)
-ADMIN_XMTP_ADDRESS = ""
+[observability]
+enabled = true
 
-[[kv_namespaces]]
-binding = "STATE"
-# Fill these in after creating the namespace:
-#   wrangler kv namespace create STATE --config cf-worker/wrangler.toml
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
-preview_id = "REPLACE_WITH_KV_PREVIEW_ID"
+[observability.logs]
+enabled = true
+invocation_logs = true
+
+[vars]
+INBOUND_EMAIL_TO = "deanpierce.eth@xmtp.mx"
+EMAIL_FROM = "Dean (XMTP) <deanpierce.eth@xmtp.mx>"
+XMTP_ALLOWED_SENDERS = ""
+XMTP_ENV = "production"
+XMTP_DEAN_ADDRESS = "deanpierce.eth"
+CONTAINER_INSTANCE_NAME = "xmtp-mx-relay-production"
+XMTP_R2_PREFIX = "xmtp-mx-relay-production/xmtp"
+XMTP_BACKUP_INTERVAL_SECONDS = "3600"
+XMTP_BACKUP_MAX_STALENESS_SECONDS = "7200"
+XMTP_FREE_SPACE_MARGIN_BYTES = "67108864"
+MAX_INBOUND_EMAIL_BYTES = "5242880"
+MAX_RELAY_BODY_BYTES = "262144"
+MAX_INTERNAL_REQUEST_BYTES = "524288"
+MAX_XMTP_BACKUP_BYTES = "1073741824"
+MAX_XMTP_BACKUP_PART_BYTES = "16777216"
+QUEUE_MAX_RETRIES = "8"
+QUEUE_REPLAY_STALE_SECONDS = "300"
+QUEUE_ABANDONED_SECONDS = "21600"
+QUEUE_ORPHANED_HANDOFF_SECONDS = "86400"
+RECOVERY_DRILL_ENABLED = "false"
+RECOVERY_IMPORT_ENABLED = "false"
+XMTP_ALLOW_NEW_INSTALLATION = "false"
+LOG_LEVEL = "info"
+
+# Replace this after `wrangler d1 create xmtp-mx-relay-production`.
+[[d1_databases]]
+binding = "RELAY_DB"
+database_name = "xmtp-mx-relay-production"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "XMTP_STATE_BUCKET"
+bucket_name = "xmtp-mx-xmtp-state-production"
+
+[[queues.producers]]
+binding = "EMAIL_DELIVERY_QUEUE"
+queue = "xmtp-mx-email-delivery-production"
+
+[[queues.producers]]
+binding = "XMTP_DELIVERY_QUEUE"
+queue = "xmtp-mx-xmtp-delivery-production"
+
+[[queues.consumers]]
+queue = "xmtp-mx-email-delivery-production"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 8
+max_concurrency = 1
+dead_letter_queue = "xmtp-mx-email-delivery-dlq-production"
+
+[[queues.consumers]]
+queue = "xmtp-mx-xmtp-delivery-production"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 8
+max_concurrency = 1
+dead_letter_queue = "xmtp-mx-xmtp-delivery-dlq-production"
+
+# DLQ consumers persist failure visibility and CAS pending work terminal. The
+# 24-hour orphan sweeper repairs safe broker-owned states if D1 remains down
+# through every finite DLQ retry.
+[[queues.consumers]]
+queue = "xmtp-mx-email-delivery-dlq-production"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 8
+max_concurrency = 1
+
+[[queues.consumers]]
+queue = "xmtp-mx-xmtp-delivery-dlq-production"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 8
+max_concurrency = 1
+
+[[send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["deanpierce.eth@xmtp.mx"]
+
+[[containers]]
+class_name = "XmtpRelayContainer"
+image = "../container/Dockerfile"
+max_instances = 1
+instance_type = "basic"
+
+[[durable_objects.bindings]]
+name = "XMTP_RELAY"
+class_name = "XmtpRelayContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["XmtpRelayContainer"]
