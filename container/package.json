@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@xmtp/node-sdk": "3.2.2",
-    "ethers": "5.7.2",
+    "ethers": "5.8.0",
     "pino": "9.9.0",
     "zod": "3.25.76"
   },
@@ -27,5 +27,10 @@
     "@types/node": "22.18.6",
     "tsx": "4.20.5",
     "typescript": "5.9.2"
+  },
+  "overrides": {
+    "protobufjs": "7.6.6",
+    "ws": "8.22.0",
+    "@xmtp/proto": "3.90.0"
   }
 }

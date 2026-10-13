@@ -102,6 +102,7 @@ Legacy Railway rollback:
 
 ## Recent Learnings
 
+- 2026-10-13: For dependency refreshes, align root Wrangler 4.150.0 with Workers types 5.20261013.1 before `npm audit fix`; otherwise npm rejects the peer tree. XMTP proto 3.90.0 stays within the 3.x line and removes the old nested Undici 5 / Busboy chain. Keep `protobufjs` at 7.6.6 or newer and `ws` at 8.22.0 or newer in all affected npm locks. The root's `ts-node-dev` → Chokidar 3 → braces 3.0.3 chain still has unpatched GHSA-vfj7-8cjw-p6xm; do not call it fixed by a braces 3.0.3 bump. An npm audit can also show low findings in Ethers 5.8.0/elliptic 6.6.1, so record remaining findings separately from older GitHub alerts. Validate all three lockfiles with `npm ci`, typechecks, container and Worker tests, and `npm run cf:dry-run`; the latter builds a local Container image but does not deploy.
 - 2025-12-17: `express-rate-limit` latest major is v8 (v7.5.2 does not exist on npm); keep it aligned with `package-lock.json`.
 - 2025-12-17: Use `@types/express@4` (Express 5 types can mismatch Express 4 runtime).
 - 2025-12-17: `mailgun.js` types require at least one of `text/html/message/template`; send `text: ''` when only HTML is present.
