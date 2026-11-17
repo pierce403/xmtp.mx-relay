@@ -131,3 +131,8 @@ Legacy endpoints are `GET /healthz` and `POST /webhooks/mailgun/inbound`. Mount 
 - [XMTP Container persistence and recovery](container/README.md)
 - [Feature status](FEATURES.md)
 - [Outstanding production work](TODO.md)
+
+## Licensing scope
+
+Original code and documentation authored for this project by Dean Pierce are licensed under the [Apache License 2.0](LICENSE).
+Third-party dependencies, assets, and quoted material retain their respective licenses and notices. This grant does not relicense third-party work.

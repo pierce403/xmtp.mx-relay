@@ -19,5 +19,6 @@
     "typescript": "^5.9.3",
     "vitest": "^4.1.11",
     "wrangler": "^4.126.0"
-  }
+  },
+  "license": "Apache-2.0"
 }
