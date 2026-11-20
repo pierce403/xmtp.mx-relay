@@ -79,6 +79,7 @@ jobs:
         run: |
           npm run typecheck
           npm run build
+          node --test tests/legacy-messages.test.cjs
 
       - name: Validate Cloudflare Worker
         run: |

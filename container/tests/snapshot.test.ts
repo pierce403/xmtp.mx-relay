@@ -20,6 +20,7 @@ import {
   prepareStorage,
   sha256Bytes,
   sha256File,
+  snapshotManifestSchema,
 } from '../src/snapshot.js';
 
 const inboxId = 'a'.repeat(64);
@@ -76,6 +77,17 @@ async function snapshot(f: Awaited<ReturnType<typeof fixture>>) {
     freeSpaceMarginBytes: 0,
   });
 }
+
+test('snapshot validation preserves legacy identifier and timestamp formats', async (t) => {
+  const f = await fixture(t);
+  const manifest = await snapshot(f);
+  const legacyFields = {
+    ...manifest,
+    snapshotId: '12345678-1234-1234-1234-123456789abc',
+    replayAfter: '2026-08-26T23:55Z',
+  };
+  assert.deepEqual(snapshotManifestSchema.parse(legacyFields), legacyFields);
+});
 
 test('closed database snapshot restores exact bytes, pin, installation, and replay cutoff', async (t) => {
   const f = await fixture(t);

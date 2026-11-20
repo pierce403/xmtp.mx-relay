@@ -14,6 +14,7 @@ import {
 } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
+import { utcDateTimeSchema } from './schema-compat.js';
 import {
   ObjectNotFoundError,
   ObjectStoreRequestError,
@@ -59,8 +60,9 @@ const chunkedDatabaseSchema = z
   .strict();
 
 const commonManifestFields = {
-  snapshotId: z.string().uuid(),
-  createdAt: z.string().datetime(),
+  // Preserve the Zod 3 UUID format accepted by existing signed manifests.
+  snapshotId: z.guid(),
+  createdAt: utcDateTimeSchema,
   xmtpEnv: z.enum(['production', 'dev', 'local']),
   inboxId: inboxIdSchema,
   installationId: z.string().min(1).max(512),
@@ -68,8 +70,8 @@ const commonManifestFields = {
   sourceBootId: z.string().min(1),
   sourceDeploymentId: z.string().nullable(),
   reason: z.string().min(1).max(256),
-  replayAfter: z.string().datetime(),
-  replayWatermark: z.string().datetime().nullable(),
+  replayAfter: utcDateTimeSchema,
+  replayWatermark: utcDateTimeSchema.nullable(),
 } as const;
 
 const snapshotManifestV2Schema = z
