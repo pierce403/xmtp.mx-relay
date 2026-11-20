@@ -3,9 +3,9 @@ import { z } from 'zod';
 export const emailSendV1Schema = z
   .object({
     type: z.literal('email.send.v1'),
-    to: z.array(z.string().email()).min(1).max(20),
-    cc: z.array(z.string().email()).max(20).optional().default([]),
-    bcc: z.array(z.string().email()).max(20).optional().default([]),
+    to: z.array(z.email()).min(1).max(20),
+    cc: z.array(z.email()).max(20).optional().default([]),
+    bcc: z.array(z.email()).max(20).optional().default([]),
     subject: z.string().optional().default(''),
     text: z.string().nullable().optional().default(null),
     html: z.string().nullable().optional().default(null),

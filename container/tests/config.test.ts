@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { ZodError } from 'zod';
 import { BOOTSTRAP_CONFIRMATION, loadConfig } from '../src/config.js';
 
 const inboxId = 'a'.repeat(64);
@@ -39,7 +40,11 @@ test('snapshot signing key is independent and required', () => {
 test('snapshot parts are hard-capped at 32 MiB and cannot exceed total backup size', () => {
   assert.throws(
     () => loadConfig(productionEnv({ XMTP_BACKUP_PART_BYTES: String(32 * 1024 * 1024 + 1) })),
-    /less than or equal to 33554432/,
+    (error: unknown) => error instanceof ZodError && error.issues.some(
+      (issue) => issue.code === 'too_big' &&
+        issue.path[0] === 'XMTP_BACKUP_PART_BYTES' &&
+        issue.maximum === 32 * 1024 * 1024,
+    ),
   );
   assert.throws(
     () => loadConfig(productionEnv({

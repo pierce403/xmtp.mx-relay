@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { utcDateTimeSchema } from './schema-compat.js';
 
 const inboxIdSchema = z.string().regex(/^[0-9a-f]{64}$/i);
 const boundedText = (max: number) => z.string().max(max);
@@ -12,7 +13,7 @@ export const emailInboundV1Schema = z
     text: boundedText(256 * 1024).nullable(),
     html: boundedText(256 * 1024).nullable(),
     messageId: boundedText(4_096).nullable(),
-    receivedAt: z.string().datetime(),
+    receivedAt: utcDateTimeSchema,
   })
   .strict();
 

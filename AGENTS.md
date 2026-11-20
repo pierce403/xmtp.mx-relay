@@ -102,6 +102,8 @@ Legacy Railway rollback:
 
 ## Recent Learnings
 
+- 2026-11-20: Keep Zod 4.6.6 or later in both relay runtimes. The root package uses the Edge Worker’s Wrangler, not a second root install. The root viem/abitype override provides Zod 4 peer compatibility for legacy XMTP. Preserve the existing UTC timestamp and snapshot identifier formats when changing validation.
+
 - 2025-12-17: `express-rate-limit` latest major is v8 (v7.5.2 does not exist on npm); keep it aligned with `package-lock.json`.
 - 2025-12-17: Use `@types/express@4` (Express 5 types can mismatch Express 4 runtime).
 - 2025-12-17: `mailgun.js` types require at least one of `text/html/message/template`; send `text: ''` when only HTML is present.
